@@ -1,0 +1,7 @@
+profile: PROFILE_NAME
+hosts:
+  - domain: site1.domain.test
+    address: 192.168.1.111
+  - domain: site2.domain.test
+    address: 127.0.0.1
+  - domain: site3.domain.test

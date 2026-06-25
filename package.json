@@ -14,6 +14,7 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
+    "demo": "node dist/cli.js --config fixtures/simple.yaml",
     "prepack": "npm run build",
     "prepublishOnly": "npm run typecheck && npm test",
     "dev": "tsx src/cli.ts"

@@ -7,6 +7,7 @@ export function parseCliOptions(argv) {
     const options = {
         configPaths: [],
         envFile: DEFAULT_ENV_FILE,
+        envFileExplicit: false,
         dryRun: false,
         printRecords: false,
         noElevate: false,
@@ -30,10 +31,12 @@ export function parseCliOptions(argv) {
         }
         if (arg === '--env-file') {
             options.envFile = requireValue(argv, ++index, '--env-file');
+            options.envFileExplicit = true;
             continue;
         }
         if (arg.startsWith('--env-file=')) {
             options.envFile = arg.slice('--env-file='.length);
+            options.envFileExplicit = true;
             continue;
         }
         if (arg === '--hosts-file') {
@@ -94,6 +97,40 @@ export function resolveHostsFileOverride(options, env = process.env) {
 }
 export function resolveNoElevate(options, env = process.env) {
     return options.noElevate || parseBooleanEnv(env.ENSURE_HOSTS_NO_ELEVATE);
+}
+/**
+ * Rebuild the CLI args for an elevated child process from already-resolved
+ * (absolute) paths. The elevated re-spawn runs in a different working
+ * directory than the parent (osascript's `do shell script` starts in `/`),
+ * so any relative path the user passed would fail to resolve in the child.
+ * Passing absolute paths fixes that without changing the public CLI surface.
+ *
+ * Elevation-only flags (`--no-elevate`, `--elevated`) and `--output-file`
+ * (Windows elevated-output plumbing) are intentionally omitted: the child is
+ * re-elevated/redirected by the elevation layer itself, not by these flags.
+ */
+export function buildElevationArgs(options, configPaths) {
+    const args = [];
+    for (const configPath of configPaths) {
+        args.push('--config', resolve(configPath));
+    }
+    // Only forward --env-file when the user explicitly set it. Node 20.6+ treats
+    // --env-file as its own flag (even after the script path) and exits with an
+    // error if the file is missing, so emitting it unconditionally would crash
+    // the elevated child whenever the default .env is absent.
+    if (options.envFileExplicit) {
+        args.push('--env-file', resolve(options.envFile));
+    }
+    if (options.hostsFile) {
+        args.push('--hosts-file', resolve(options.hostsFile));
+    }
+    if (options.dryRun) {
+        args.push('--dry-run');
+    }
+    if (options.printRecords) {
+        args.push('--print-records');
+    }
+    return args;
 }
 export function loadProfiles(configPaths) {
     return configPaths.map(loadProfile);

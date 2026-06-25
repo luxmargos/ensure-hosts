@@ -1,8 +1,14 @@
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { loadDefaultEnv, loadProfile, parseCliOptions, resolveConfigPaths } from '../src/config.js';
+import {
+  buildElevationArgs,
+  loadDefaultEnv,
+  loadProfile,
+  parseCliOptions,
+  resolveConfigPaths,
+} from '../src/config.js';
 
 describe('config loading', () => {
   it('loads canonical YAML config', () => {
@@ -47,5 +53,66 @@ describe('config loading', () => {
 
   it('does not fail when dotenv file is missing', () => {
     expect(() => loadDefaultEnv(join(tmpdir(), 'missing-ensure-hosts.env'))).not.toThrow();
+  });
+});
+
+describe('buildElevationArgs', () => {
+  it('resolves relative config paths against the parent cwd', () => {
+    const options = parseCliOptions(['--config', 'fixtures/simple.yaml']);
+    expect(buildElevationArgs(options, ['fixtures/simple.yaml'])).toEqual([
+      '--config',
+      resolve('fixtures/simple.yaml'),
+    ]);
+  });
+
+  it('omits --env-file when the user did not set it explicitly', () => {
+    const options = parseCliOptions(['--config', 'a.yaml']);
+    expect(buildElevationArgs(options, ['a.yaml'])).not.toContain('--env-file');
+  });
+
+  it('includes resolved --env-file only when explicitly provided', () => {
+    const options = parseCliOptions(['--config', 'a.yaml', '--env-file', 'secrets.env']);
+    expect(buildElevationArgs(options, ['a.yaml'])).toContain('--env-file');
+    expect(buildElevationArgs(options, ['a.yaml'])).toContain(resolve('secrets.env'));
+  });
+
+  it('includes resolved --hosts-file when provided', () => {
+    const options = parseCliOptions(['--config', 'a.yaml', '--hosts-file', 'tmp/hosts']);
+    expect(buildElevationArgs(options, ['a.yaml'])).toContain('--hosts-file');
+    expect(buildElevationArgs(options, ['a.yaml'])).toContain(resolve('tmp/hosts'));
+  });
+
+  it('preserves --dry-run and --print-records flags', () => {
+    const options = parseCliOptions(['--config', 'a.yaml', '--dry-run', '--print-records']);
+    expect(buildElevationArgs(options, ['a.yaml'])).toEqual([
+      '--config',
+      resolve('a.yaml'),
+      '--dry-run',
+      '--print-records',
+    ]);
+  });
+
+  it('omits --no-elevate and --output-file', () => {
+    const options = parseCliOptions([
+      '--config',
+      'a.yaml',
+      '--no-elevate',
+      '--output-file',
+      '/tmp/log',
+    ]);
+    const args = buildElevationArgs(options, ['a.yaml']);
+    expect(args).not.toContain('--no-elevate');
+    expect(args).not.toContain('--output-file');
+    expect(args).not.toContain('/tmp/log');
+  });
+
+  it('emits one --config pair per resolved path, in order', () => {
+    const options = parseCliOptions(['--config', 'a.yaml', '--config', 'b.yml']);
+    expect(buildElevationArgs(options, ['a.yaml', 'b.yml'])).toEqual([
+      '--config',
+      resolve('a.yaml'),
+      '--config',
+      resolve('b.yml'),
+    ]);
   });
 });

@@ -63,10 +63,20 @@ function tryMacOsPrivilegePrompt(options: ElevationOptions): boolean {
   if (result.status === 0) {
     return true;
   }
-  if (result.status === 1) {
+
+  const childError = result.stderr?.trim() ?? '';
+  // osascript returns exit status 1 both when the user cancels the prompt and
+  // when the elevated child exits non-zero. A cancelled prompt produces no
+  // child stderr; a failed child leaves our own `[ensure-hosts]` error line.
+  // Distinguish them so a real failure isn't misreported as "cancelled".
+  const childFailed = /\[ensure-hosts\]|Error/i.test(childError);
+  if (result.status === 1 && !childFailed) {
     throw new Error('macOS administrator privilege request was cancelled.');
   }
-  throw new Error(`macOS administrator privilege request failed: osascript exit=${result.status}`);
+  const detail = childError ? `\n${childError}` : '';
+  throw new Error(
+    `macOS administrator privilege request failed: osascript exit=${result.status}.${detail}`
+  );
 }
 
 function tryWindowsPrivilegePrompt(options: ElevationOptions): boolean {
@@ -127,10 +137,14 @@ function tryWindowsPrivilegePrompt(options: ElevationOptions): boolean {
     return true;
   }
 
-  throw new Error(`Windows administrator privilege request failed or was cancelled: powershell exit=${result.status}`);
+  const detail = [capturedOutput.trim(), result.stderr?.trim() ?? ''].filter(Boolean).join('\n');
+  const suffix = detail ? `\n${detail}` : '';
+  throw new Error(
+    `Windows administrator privilege request failed or was cancelled: powershell exit=${result.status}.${suffix}`
+  );
 }
 
-function withoutElevationArgs(args: string[]): string[] {
+export function withoutElevationArgs(args: string[]): string[] {
   const output: string[] = [];
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index];

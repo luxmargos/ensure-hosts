@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { loadDefaultEnv, loadProfiles, parseCliOptions, resolveConfigPaths, resolveHostsFileOverride, resolveNoElevate, } from './config.js';
+import { buildElevationArgs, loadDefaultEnv, loadProfiles, parseCliOptions, resolveConfigPaths, resolveHostsFileOverride, resolveNoElevate, } from './config.js';
 import { expandProfiles } from './domain-map.js';
 import { rewriteHostsContent } from './hosts.js';
 import { elevatedCommandHint, resolveDefaultHostsPath, tryElevate } from './platform.js';
@@ -36,7 +36,7 @@ async function main() {
         if (isPermissionError(error)) {
             const elevated = tryElevate({
                 scriptPath: fileURLToPath(import.meta.url),
-                args: process.argv.slice(2),
+                args: buildElevationArgs(options, configPaths),
                 cwd: process.cwd(),
                 noElevate: resolveNoElevate(options),
                 elevated: options.elevated,

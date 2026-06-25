@@ -3,6 +3,7 @@ import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname } from 'node:path';
 import {
+  buildElevationArgs,
   loadDefaultEnv,
   loadProfiles,
   parseCliOptions,
@@ -50,7 +51,7 @@ async function main(): Promise<void> {
     if (isPermissionError(error)) {
       const elevated = tryElevate({
         scriptPath: fileURLToPath(import.meta.url),
-        args: process.argv.slice(2),
+        args: buildElevationArgs(options, configPaths),
         cwd: process.cwd(),
         noElevate: resolveNoElevate(options),
         elevated: options.elevated,

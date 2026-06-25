@@ -23,6 +23,7 @@ export interface ExpandedProfile {
 export interface CliOptions {
     configPaths: string[];
     envFile: string;
+    envFileExplicit: boolean;
     hostsFile?: string;
     dryRun: boolean;
     printRecords: boolean;

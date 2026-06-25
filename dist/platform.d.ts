@@ -10,3 +10,4 @@ export interface ElevationOptions {
 }
 export declare function tryElevate(options: ElevationOptions): boolean;
 export declare function elevatedCommandHint(command?: string): string;
+export declare function withoutElevationArgs(args: string[]): string[];

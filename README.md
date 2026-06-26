@@ -112,10 +112,11 @@ ensure-hosts --config ./hosts.local.yaml --remove --dry-run
 - `--remove-force` strips **every** domain the config lists, including
   `rewrite: false` entries. Use this to fully uninstall a profile's entries.
 
-Both flags also trigger the macOS/Windows privilege prompt when writing the
-real hosts file, and forward through the elevated re-spawn. `--remove` and
-`--remove-force` are mutually exclusive and cannot be combined with
-`--print-records`.
+Both flags also attempt privilege elevation when writing the real hosts file.
+On macOS, the CLI first tries `sudo tee` (a terminal password prompt,
+like `mkcert`), then falls back to an `osascript` GUI administrator prompt.
+On Windows, a UAC elevation prompt is shown. `--remove` and `--remove-force`
+are mutually exclusive and cannot be combined with `--print-records`.
 
 ## Options
 
@@ -127,7 +128,7 @@ real hosts file, and forward through the elevated re-spawn. `--remove` and
 --print-records      print expanded records and exit
 --remove             remove rewrite:true domains (respects rewrite:false)
 --remove-force       remove all listed domains, including rewrite:false
---no-elevate         disable macOS/Windows privilege prompt
+--no-elevate         disable sudo/osascript (macOS) or UAC (Windows) privilege prompt
 --help               show help
 --version            show version
 ```

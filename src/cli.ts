@@ -62,8 +62,10 @@ async function main(): Promise<void> {
         elevated: options.elevated,
         dryRun: options.dryRun,
         printRecords: options.printRecords,
+        filePath: hostsFile,
+        content: result.content,
       });
-      if (elevated) {
+      if (elevated === 'spawned') {
         return;
       }
       throw new Error(
@@ -108,8 +110,10 @@ function runRemove(options: CliOptions, configPaths: string[], expandedProfiles:
         elevated: options.elevated,
         dryRun: options.dryRun,
         printRecords: options.printRecords,
+        filePath: hostsFile,
+        content: result.content,
       });
-      if (elevated) {
+      if (elevated === 'spawned') {
         return;
       }
       const modeFlag = force ? '--remove-force' : '--remove';

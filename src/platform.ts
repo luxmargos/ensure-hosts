@@ -1,4 +1,4 @@
-import { readFileSync, unlinkSync } from 'node:fs';
+import { readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join, win32 } from 'node:path';
 import { platform } from 'node:os';
 import { spawnSync } from 'node:child_process';
@@ -10,6 +10,8 @@ export function resolveDefaultHostsPath(currentPlatform = platform(), env = proc
   return '/etc/hosts';
 }
 
+export type ElevationResult = false | 'written' | 'spawned';
+
 export interface ElevationOptions {
   scriptPath: string;
   args: string[];
@@ -18,13 +20,22 @@ export interface ElevationOptions {
   elevated: boolean;
   dryRun: boolean;
   printRecords: boolean;
+  filePath: string;
+  content: string;
 }
 
-export function tryElevate(options: ElevationOptions): boolean {
+export function tryElevate(options: ElevationOptions): ElevationResult {
   if (options.noElevate || options.elevated || options.dryRun || options.printRecords) {
     return false;
   }
   if (platform() === 'darwin') {
+    // Try sudo (mkcert-style) first — works in terminal contexts and avoids
+    // the noowners EPERM that osascript hits on external APFS volumes.
+    const sudoResult = tryMacOsSudoWrite(options.filePath, options.content);
+    if (sudoResult) {
+      return sudoResult;
+    }
+    // Fall back to osascript GUI prompt for non-terminal contexts.
     return tryMacOsPrivilegePrompt(options);
   }
   if (platform() === 'win32') {
@@ -43,8 +54,34 @@ export function elevatedCommandHint(command = 'ensure-hosts'): string {
   return `Linux: run \`sudo ${command}\`.`;
 }
 
-function tryMacOsPrivilegePrompt(options: ElevationOptions): boolean {
-  console.log('[ensure-hosts] Requesting macOS administrator privileges.');
+function tryMacOsSudoWrite(filePath: string, content: string): ElevationResult {
+  // Already root → write directly, no sudo needed.
+  if (typeof process.getuid === 'function' && process.getuid() === 0) {
+    writeFileSync(filePath, content, 'utf8');
+    return 'written';
+  }
+  // Check if sudo is available before attempting to prompt.
+  const which = spawnSync('which', ['sudo'], { stdio: 'ignore' });
+  if (which.status !== 0) {
+    return false;
+  }
+  // Run: sudo -- tee <filePath> with content piped via stdin.
+  // sudo reads the password from /dev/tty (the controlling terminal),
+  // so the user sees a terminal password prompt. Only tee runs as root;
+  // node stays as the normal user, avoiding noowners EPERM on external volumes.
+  const result = spawnSync('sudo', ['--', 'tee', filePath], {
+    input: content,
+    encoding: 'utf8',
+    stdio: ['pipe', 'ignore', 'inherit'],
+  });
+  if (result.status === 0) {
+    return 'written';
+  }
+  return false;
+}
+
+function tryMacOsPrivilegePrompt(options: ElevationOptions): ElevationResult {
+  console.log('[ensure-hosts] Requesting macOS administrator privileges via osascript.');
   const rerunArgs = [...withoutElevationArgs(options.args), '--elevated'];
   const command = [shellQuote(process.execPath), shellQuote(options.scriptPath), ...rerunArgs.map(shellQuote)].join(' ');
   const script = `do shell script ${appleScriptString(command)} with administrator privileges`;
@@ -61,7 +98,7 @@ function tryMacOsPrivilegePrompt(options: ElevationOptions): boolean {
     process.stderr.write(result.stderr);
   }
   if (result.status === 0) {
-    return true;
+    return 'spawned';
   }
 
   const childError = result.stderr?.trim() ?? '';
@@ -79,7 +116,7 @@ function tryMacOsPrivilegePrompt(options: ElevationOptions): boolean {
   );
 }
 
-function tryWindowsPrivilegePrompt(options: ElevationOptions): boolean {
+function tryWindowsPrivilegePrompt(options: ElevationOptions): ElevationResult {
   console.log('[ensure-hosts] Requesting Windows administrator privileges.');
   const outputPath = join(
     process.env.TEMP ?? process.env.TMP ?? 'C:\\Windows\\Temp',
@@ -134,7 +171,7 @@ function tryWindowsPrivilegePrompt(options: ElevationOptions): boolean {
   }
   if (result.status === 0) {
     console.log('[ensure-hosts] Windows elevated hosts update completed.');
-    return true;
+    return 'spawned';
   }
 
   const detail = [capturedOutput.trim(), result.stderr?.trim() ?? ''].filter(Boolean).join('\n');

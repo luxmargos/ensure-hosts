@@ -56,6 +56,44 @@ describe('config loading', () => {
   });
 });
 
+describe('remove flags', () => {
+  it('parses --remove', () => {
+    const options = parseCliOptions(['--config', 'a.yaml', '--remove']);
+    expect(options.remove).toBe(true);
+    expect(options.removeForce).toBe(false);
+  });
+
+  it('parses --remove-force', () => {
+    const options = parseCliOptions(['--config', 'a.yaml', '--remove-force']);
+    expect(options.removeForce).toBe(true);
+    expect(options.remove).toBe(false);
+  });
+
+  it('defaults both remove flags to false', () => {
+    const options = parseCliOptions(['--config', 'a.yaml']);
+    expect(options.remove).toBe(false);
+    expect(options.removeForce).toBe(false);
+  });
+
+  it('rejects --remove together with --remove-force', () => {
+    expect(() => parseCliOptions(['--config', 'a.yaml', '--remove', '--remove-force'])).toThrow(
+      /cannot be used together/
+    );
+  });
+
+  it('rejects --remove with --print-records', () => {
+    expect(() => parseCliOptions(['--config', 'a.yaml', '--remove', '--print-records'])).toThrow(
+      /--print-records cannot be combined/
+    );
+  });
+
+  it('rejects --remove-force with --print-records', () => {
+    expect(() => parseCliOptions(['--config', 'a.yaml', '--remove-force', '--print-records'])).toThrow(
+      /--print-records cannot be combined/
+    );
+  });
+});
+
 describe('buildElevationArgs', () => {
   it('resolves relative config paths against the parent cwd', () => {
     const options = parseCliOptions(['--config', 'fixtures/simple.yaml']);
@@ -114,5 +152,30 @@ describe('buildElevationArgs', () => {
       '--config',
       resolve('b.yml'),
     ]);
+  });
+
+  it('forwards --remove to the elevated child', () => {
+    const options = parseCliOptions(['--config', 'a.yaml', '--remove']);
+    expect(buildElevationArgs(options, ['a.yaml'])).toEqual([
+      '--config',
+      resolve('a.yaml'),
+      '--remove',
+    ]);
+  });
+
+  it('forwards --remove-force to the elevated child', () => {
+    const options = parseCliOptions(['--config', 'a.yaml', '--remove-force']);
+    expect(buildElevationArgs(options, ['a.yaml'])).toEqual([
+      '--config',
+      resolve('a.yaml'),
+      '--remove-force',
+    ]);
+  });
+
+  it('omits remove flags when neither is set', () => {
+    const options = parseCliOptions(['--config', 'a.yaml']);
+    const args = buildElevationArgs(options, ['a.yaml']);
+    expect(args).not.toContain('--remove');
+    expect(args).not.toContain('--remove-force');
   });
 });

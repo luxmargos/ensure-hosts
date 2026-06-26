@@ -10,6 +10,8 @@ export function parseCliOptions(argv) {
         envFileExplicit: false,
         dryRun: false,
         printRecords: false,
+        remove: false,
+        removeForce: false,
         noElevate: false,
         elevated: false,
     };
@@ -63,6 +65,14 @@ export function parseCliOptions(argv) {
             options.printRecords = true;
             continue;
         }
+        if (arg === '--remove') {
+            options.remove = true;
+            continue;
+        }
+        if (arg === '--remove-force') {
+            options.removeForce = true;
+            continue;
+        }
         if (arg === '--no-elevate') {
             options.noElevate = true;
             continue;
@@ -73,7 +83,16 @@ export function parseCliOptions(argv) {
         }
         throw new Error(`Unknown option: ${arg}\n\n${usage()}`);
     }
+    assertCompatibleModes(options);
     return options;
+}
+function assertCompatibleModes(options) {
+    if (options.remove && options.removeForce) {
+        throw new Error(`--remove and --remove-force cannot be used together.\n\n${usage()}`);
+    }
+    if ((options.remove || options.removeForce) && options.printRecords) {
+        throw new Error(`--print-records cannot be combined with --remove or --remove-force.\n\n${usage()}`);
+    }
 }
 export function loadDefaultEnv(envFile) {
     const resolved = resolve(envFile);
@@ -129,6 +148,12 @@ export function buildElevationArgs(options, configPaths) {
     }
     if (options.printRecords) {
         args.push('--print-records');
+    }
+    if (options.remove) {
+        args.push('--remove');
+    }
+    if (options.removeForce) {
+        args.push('--remove-force');
     }
     return args;
 }
@@ -236,9 +261,14 @@ export function usage() {
         '  --hosts-file <path>  override hosts file path',
         '  --dry-run            print rewritten hosts content without writing',
         '  --print-records      print expanded records and exit',
+        '  --remove             remove rewrite:true domains (respects rewrite:false)',
+        '  --remove-force       remove all listed domains, including rewrite:false',
         '  --no-elevate         disable macOS/Windows privilege prompt',
         '  --help               show help',
         '  --version            show version',
+        '',
+        '--remove and --remove-force are mutually exclusive and cannot be combined',
+        'with --print-records.',
     ].join('\n');
 }
 //# sourceMappingURL=config.js.map

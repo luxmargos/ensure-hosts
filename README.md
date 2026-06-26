@@ -15,6 +15,8 @@ ensure-hosts --config ./hosts.local.yaml
 ensure-hosts --config ./base.yaml --config ./project.yaml
 ensure-hosts --config ./hosts.local.yaml --dry-run
 ensure-hosts --config ./hosts.local.yaml --print-records
+ensure-hosts --config ./hosts.local.yaml --remove
+ensure-hosts --config ./hosts.local.yaml --remove-force
 ```
 
 The CLI loads `.env` from the current working directory by default. Missing `.env` files and missing environment variables are ignored.
@@ -92,6 +94,29 @@ Entries without an effective `address` are not written. If `rewrite` is `true`, 
 - Does not remove, comment, or alter existing same-domain lines.
 - Appends a generated entry only when the domain is absent and an address is available.
 
+## Remove mode
+
+The default action ensures the listed domains are present. Two flags do the
+inverse — remove the listed domains without appending anything:
+
+```sh
+ensure-hosts --config ./hosts.local.yaml --remove
+ensure-hosts --config ./hosts.local.yaml --remove-force
+ensure-hosts --config ./hosts.local.yaml --remove --dry-run
+```
+
+- `--remove` strips the domains declared `rewrite: true` (the same set ensure
+  cleans up), along with their stale `# PROFILE_NAME` comments. Domains
+  declared `rewrite: false` are left untouched, consistent with their
+  "do not alter existing entries" contract.
+- `--remove-force` strips **every** domain the config lists, including
+  `rewrite: false` entries. Use this to fully uninstall a profile's entries.
+
+Both flags also trigger the macOS/Windows privilege prompt when writing the
+real hosts file, and forward through the elevated re-spawn. `--remove` and
+`--remove-force` are mutually exclusive and cannot be combined with
+`--print-records`.
+
 ## Options
 
 ```txt
@@ -100,6 +125,8 @@ Entries without an effective `address` are not written. If `rewrite` is `true`, 
 --hosts-file <path>  override hosts file path
 --dry-run            print rewritten hosts content without writing
 --print-records      print expanded records and exit
+--remove             remove rewrite:true domains (respects rewrite:false)
+--remove-force       remove all listed domains, including rewrite:false
 --no-elevate         disable macOS/Windows privilege prompt
 --help               show help
 --version            show version

@@ -31,6 +31,8 @@ export interface CliOptions {
   hostsFile?: string;
   dryRun: boolean;
   printRecords: boolean;
+  remove: boolean;
+  removeForce: boolean;
   noElevate: boolean;
   elevated: boolean;
   outputFile?: string;

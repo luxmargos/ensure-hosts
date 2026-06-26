@@ -4,6 +4,71 @@ export function rewriteHostsContent(content, profiles) {
     const sourceLines = splitLines(content);
     const cleanupDomains = new Set(profiles.flatMap(profile => profile.cleanupDomains));
     const profileNames = new Set(profiles.map(profile => profile.profile));
+    const { lines: cleanedLines, removedDomains } = cleanupHostsLines(sourceLines, cleanupDomains, profileNames);
+    const compactedLines = compactBlankRuns(cleanedLines);
+    const appended = selectRecordsToAppend(compactedLines, profiles);
+    const nextLines = [...trimTrailingBlankLines(compactedLines)];
+    if (appended.length > 0) {
+        if (nextLines.length > 0) {
+            nextLines.push('');
+        }
+        for (const record of appended) {
+            nextLines.push(`# ${record.profile}`);
+            nextLines.push(`${record.address} ${record.domain}`);
+        }
+    }
+    const contentBody = nextLines.join(eol);
+    const nextContent = contentBody.length > 0 ? `${contentBody}${eol}` : hadFinalEol ? eol : '';
+    return {
+        content: nextContent,
+        appended,
+        removedDomains: [...removedDomains],
+    };
+}
+/**
+ * Remove the domains managed by the given profiles from the hosts content,
+ * without appending anything. This is the inverse of the default ensure
+ * action: run the cleanup phase only.
+ *
+ * `force: false` (the `--remove` flag) strips only `cleanupDomains` — the
+ * domains declared `rewrite: true`. Domains declared `rewrite: false` are
+ * left untouched, matching their "do not alter existing entries" contract.
+ *
+ * `force: true` (the `--remove-force` flag) additionally strips every domain
+ * the profiles would write (`record.domain`), including `rewrite: false`
+ * entries.
+ */
+export function removeHostsContent(content, profiles, options) {
+    const eol = detectEol(content);
+    const hadFinalEol = content.endsWith('\n') || content.endsWith('\r\n');
+    const sourceLines = splitLines(content);
+    const removeDomains = new Set(profiles.flatMap(profile => profile.cleanupDomains));
+    if (options.force) {
+        for (const profile of profiles) {
+            for (const record of profile.records) {
+                removeDomains.add(record.domain);
+            }
+        }
+    }
+    const profileNames = new Set(profiles.map(profile => profile.profile));
+    const { lines: cleanedLines, removedDomains } = cleanupHostsLines(sourceLines, removeDomains, profileNames);
+    const compactedLines = compactBlankRuns(cleanedLines);
+    const nextLines = [...trimTrailingBlankLines(compactedLines)];
+    const contentBody = nextLines.join(eol);
+    const nextContent = contentBody.length > 0 ? `${contentBody}${eol}` : hadFinalEol ? eol : '';
+    return {
+        content: nextContent,
+        removedDomains: [...removedDomains],
+    };
+}
+/**
+ * Run the shared line-cleanup pass used by both ensure (rewrite) and remove.
+ * Strips tokens in `cleanupDomains` from each line via `cleanHostsLine`,
+ * drops orphaned `# <profile>` managed comments that precede a removed line,
+ * and returns the surviving lines plus the set of domains actually removed.
+ * Does not compact blank runs or append anything — callers do that.
+ */
+function cleanupHostsLines(sourceLines, cleanupDomains, profileNames) {
     const cleanedLines = [];
     const removedDomains = new Set();
     let pendingManagedComments = [];
@@ -30,25 +95,7 @@ export function rewriteHostsContent(content, profiles) {
     if (pendingManagedComments.length > 0) {
         cleanedLines.push(...pendingManagedComments);
     }
-    const compactedLines = compactBlankRuns(cleanedLines);
-    const appended = selectRecordsToAppend(compactedLines, profiles);
-    const nextLines = [...trimTrailingBlankLines(compactedLines)];
-    if (appended.length > 0) {
-        if (nextLines.length > 0) {
-            nextLines.push('');
-        }
-        for (const record of appended) {
-            nextLines.push(`# ${record.profile}`);
-            nextLines.push(`${record.address} ${record.domain}`);
-        }
-    }
-    const contentBody = nextLines.join(eol);
-    const nextContent = contentBody.length > 0 ? `${contentBody}${eol}` : hadFinalEol ? eol : '';
-    return {
-        content: nextContent,
-        appended,
-        removedDomains: [...removedDomains],
-    };
+    return { lines: cleanedLines, removedDomains };
 }
 export function selectRecordsToAppend(lines, profiles) {
     const existingDomains = collectDomainsFromLines(lines);

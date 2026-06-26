@@ -40,6 +40,18 @@ describe('withoutElevationArgs', () => {
       withoutElevationArgs(['--config', 'a.yaml', '--output-file=/tmp/log'])
     ).toEqual(['--config', 'a.yaml']);
   });
+
+  it('keeps --remove and --remove-force (mode flags, not elevation-only)', () => {
+    expect(
+      withoutElevationArgs([
+        '--config',
+        'a.yaml',
+        '--remove',
+        '--remove-force',
+        '--no-elevate',
+      ])
+    ).toEqual(['--config', 'a.yaml', '--remove', '--remove-force']);
+  });
 });
 
 describe('tryElevate guard branches', () => {

@@ -13,6 +13,8 @@ export function parseCliOptions(argv: string[]): CliOptions {
     envFileExplicit: false,
     dryRun: false,
     printRecords: false,
+    remove: false,
+    removeForce: false,
     noElevate: false,
     elevated: false,
   };
@@ -68,6 +70,14 @@ export function parseCliOptions(argv: string[]): CliOptions {
       options.printRecords = true;
       continue;
     }
+    if (arg === '--remove') {
+      options.remove = true;
+      continue;
+    }
+    if (arg === '--remove-force') {
+      options.removeForce = true;
+      continue;
+    }
     if (arg === '--no-elevate') {
       options.noElevate = true;
       continue;
@@ -80,7 +90,18 @@ export function parseCliOptions(argv: string[]): CliOptions {
     throw new Error(`Unknown option: ${arg}\n\n${usage()}`);
   }
 
+  assertCompatibleModes(options);
+
   return options;
+}
+
+function assertCompatibleModes(options: CliOptions): void {
+  if (options.remove && options.removeForce) {
+    throw new Error(`--remove and --remove-force cannot be used together.\n\n${usage()}`);
+  }
+  if ((options.remove || options.removeForce) && options.printRecords) {
+    throw new Error(`--print-records cannot be combined with --remove or --remove-force.\n\n${usage()}`);
+  }
 }
 
 export function loadDefaultEnv(envFile: string): void {
@@ -144,6 +165,12 @@ export function buildElevationArgs(options: CliOptions, configPaths: string[]): 
   }
   if (options.printRecords) {
     args.push('--print-records');
+  }
+  if (options.remove) {
+    args.push('--remove');
+  }
+  if (options.removeForce) {
+    args.push('--remove-force');
   }
 
   return args;
@@ -270,8 +297,13 @@ export function usage(): string {
     '  --hosts-file <path>  override hosts file path',
     '  --dry-run            print rewritten hosts content without writing',
     '  --print-records      print expanded records and exit',
+    '  --remove             remove rewrite:true domains (respects rewrite:false)',
+    '  --remove-force       remove all listed domains, including rewrite:false',
     '  --no-elevate         disable macOS/Windows privilege prompt',
     '  --help               show help',
     '  --version            show version',
+    '',
+    '--remove and --remove-force are mutually exclusive and cannot be combined',
+    'with --print-records.',
   ].join('\n');
 }

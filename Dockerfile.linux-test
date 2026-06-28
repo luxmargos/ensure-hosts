@@ -1,0 +1,25 @@
+# Dockerfile.linux-test — Linux test container for ensure-hosts
+# NOT FOR PRODUCTION. Use only for running the test suite and exercising
+# the CLI (dry-run, --print-records, root write, non-root failure) on Linux.
+#
+# Usage:
+#   docker compose -f compose.linux-test.yaml run --rm test
+#   docker compose -f compose.linux-test.yaml run --rm root-write
+#   docker compose -f compose.linux-test.yaml run --rm non-root-fail
+
+FROM node:20-bookworm-slim
+
+WORKDIR /app
+
+# Install dependencies first for better layer caching.
+COPY package.json package-lock.json ./
+RUN npm ci
+
+# Copy the rest of the source.
+COPY . .
+
+# Build the TypeScript output.
+RUN npm run build
+
+# Default to running the test suite.
+CMD ["npm", "test"]

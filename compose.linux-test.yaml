@@ -1,0 +1,95 @@
+# compose.linux-test.yaml — Linux test harness for ensure-hosts
+# NOT FOR PRODUCTION. Use only for running tests and exercising the CLI
+# on Linux to verify platform behavior (root write, non-root failure hint,
+# dry-run, --print-records).
+#
+# Usage:
+#   docker compose -f compose.linux-test.yaml run --rm test
+#   docker compose -f compose.linux-test.yaml run --rm typecheck
+#   docker compose -f compose.linux-test.yaml run --rm build
+#   docker compose -f compose.linux-test.yaml run --rm dry-run
+#   docker compose -f compose.linux-test.yaml run --rm print-records
+#   docker compose -f compose.linux-test.yaml run --rm root-write
+#   docker compose -f compose.linux-test.yaml run --rm non-root-fail
+#   docker compose -f compose.linux-test.yaml run --rm remove
+#
+# Or run all tests:
+#   docker compose -f compose.linux-test.yaml run --rm test
+
+services:
+  test:
+    build:
+      context: .
+      dockerfile: Dockerfile.linux-test
+    command: npm test
+
+  typecheck:
+    build:
+      context: .
+      dockerfile: Dockerfile.linux-test
+    command: npm run typecheck
+
+  build:
+    build:
+      context: .
+      dockerfile: Dockerfile.linux-test
+    command: npm run build
+
+  dry-run:
+    build:
+      context: .
+      dockerfile: Dockerfile.linux-test
+    command: node dist/cli.js --config fixtures/simple.yaml --dry-run
+
+  print-records:
+    build:
+      context: .
+      dockerfile: Dockerfile.linux-test
+    command: node dist/cli.js --config fixtures/simple.yaml --print-records
+
+  # Run as root writing to a temp hosts file — verifies the
+  # "Running as root" notification and successful direct write.
+  root-write:
+    build:
+      context: .
+      dockerfile: Dockerfile.linux-test
+    user: root
+    command: >
+      sh -c "
+      cp fixtures/hosts.before /tmp/test-hosts &&
+      node dist/cli.js --config fixtures/simple.yaml --hosts-file /tmp/test-hosts &&
+      echo '--- /tmp/test-hosts ---' &&
+      cat /tmp/test-hosts
+      "
+
+  # Run as non-root against an unwritable file — verifies the
+  # "Permission denied" error and the "Linux: run sudo ensure-hosts" hint.
+  # The image is built as root, so we create the read-only hosts file as root,
+  # then drop to the `node` user for the CLI run.
+  non-root-fail:
+    build:
+      context: .
+      dockerfile: Dockerfile.linux-test
+    user: root
+    command: >
+      sh -c "
+      cp fixtures/hosts.before /tmp/test-hosts &&
+      chmod 644 /tmp/test-hosts &&
+      chown root:root /tmp/test-hosts &&
+      su node -s /bin/sh -c 'node dist/cli.js --config fixtures/simple.yaml --hosts-file /tmp/test-hosts'
+      "
+
+  # Run as root and test the --remove flag.
+  remove:
+    build:
+      context: .
+      dockerfile: Dockerfile.linux-test
+    user: root
+    command: >
+      sh -c "
+      cp fixtures/hosts.before /tmp/test-hosts &&
+      echo '127.0.0.1  site1.domain.test  # PROFILE_NAME' >> /tmp/test-hosts &&
+      node dist/cli.js --config fixtures/simple.yaml --hosts-file /tmp/test-hosts --remove &&
+      echo '--- /tmp/test-hosts after remove ---' &&
+      cat /tmp/test-hosts
+      "

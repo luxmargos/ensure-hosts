@@ -129,6 +129,7 @@ are mutually exclusive and cannot be combined with `--print-records`.
 --remove             remove rewrite:true domains (respects rewrite:false)
 --remove-force       remove all listed domains, including rewrite:false
 --no-elevate         disable sudo/osascript (macOS) or UAC (Windows) privilege prompt
+--no-elevate (Linux)  no-op; Linux has no in-process elevation — pre-elevate with sudo
 --help               show help
 --version            show version
 ```
@@ -141,3 +142,33 @@ By default, the CLI writes to:
 - Windows: `%SystemRoot%\\System32\\drivers\\etc\\hosts`
 
 Use `--hosts-file` or `ENSURE_HOSTS_HOSTS_FILE` to override the path for tests/custom workflows.
+
+## Testing on Linux
+
+The repository includes a Docker-based Linux test harness (`Dockerfile.linux-test` + `compose.linux-test.yaml`). These files are **for testing only, not production**.
+
+On Linux, ensure-hosts does not perform in-process elevation — the user is expected to pre-elevate with `sudo ensure-hosts ...`. When already running as root, the CLI prints `[ensure-hosts] Running as root; writing /etc/hosts directly.` before the write. When not root and the write fails, it prints a `Permission denied` error with a `Linux: run \`sudo ensure-hosts ...\`` hint.
+
+```sh
+# Run the unit test suite in a Linux container
+docker compose -f compose.linux-test.yaml run --rm test
+
+# Typecheck and build
+docker compose -f compose.linux-test.yaml run --rm typecheck
+docker compose -f compose.linux-test.yaml run --rm build
+
+# Exercise the CLI (dry-run, --print-records)
+docker compose -f compose.linux-test.yaml run --rm dry-run
+docker compose -f compose.linux-test.yaml run --rm print-records
+
+# Root write — verifies the "Running as root" notification
+docker compose -f compose.linux-test.yaml run --rm root-write
+
+# Non-root failure — verifies the "Permission denied" + sudo hint
+docker compose -f compose.linux-test.yaml run --rm non-root-fail
+
+# Remove mode as root
+docker compose -f compose.linux-test.yaml run --rm remove
+```
+
+The `root-write`, `non-root-fail`, and `remove` services use `--hosts-file /tmp/test-hosts` so the real `/etc/hosts` is never modified.

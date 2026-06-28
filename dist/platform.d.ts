@@ -20,5 +20,11 @@ export declare function tryElevate(options: ElevationOptions): ElevationResult;
  * elevation happened and the caller should throw the sudo hint.
  */
 export declare function elevationHandled(elevated: ElevationResult): boolean;
+/**
+ * Prints a notification when the process is running as root (uid 0),
+ * so the user knows the hosts file will be written directly without
+ * any elevation prompt. Called before the direct writeFileSync in cli.ts.
+ */
+export declare function notifyRootWrite(filePath: string): void;
 export declare function elevatedCommandHint(command?: string): string;
 export declare function withoutElevationArgs(args: string[]): string[];

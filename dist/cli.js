@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { buildElevationArgs, loadDefaultEnv, loadProfiles, parseCliOptions, resolveConfigPaths, resolveHostsFileOverride, resolveNoElevate, } from './config.js';
 import { expandProfiles } from './domain-map.js';
 import { removeHostsContent, rewriteHostsContent } from './hosts.js';
-import { elevatedCommandHint, elevationHandled, resolveDefaultHostsPath, tryElevate } from './platform.js';
+import { elevatedCommandHint, elevationHandled, notifyRootWrite, resolveDefaultHostsPath, tryElevate } from './platform.js';
 async function main() {
     const options = parseCliOptions(process.argv.slice(2));
     if (options.outputFile) {
@@ -33,6 +33,7 @@ async function main() {
         return;
     }
     try {
+        notifyRootWrite(hostsFile);
         writeFileSync(hostsFile, result.content, 'utf8');
     }
     catch (error) {
@@ -75,6 +76,7 @@ function runRemove(options, configPaths, expandedProfiles) {
         return;
     }
     try {
+        notifyRootWrite(hostsFile);
         writeFileSync(hostsFile, result.content, 'utf8');
     }
     catch (error) {

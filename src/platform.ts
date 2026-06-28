@@ -38,6 +38,11 @@ export function tryElevate(options: ElevationOptions): ElevationResult {
     // Fall back to osascript GUI prompt for non-terminal contexts.
     return tryMacOsPrivilegePrompt(options);
   }
+  if (platform() === 'linux') {
+    // Linux: no in-process elevation. The user pre-elevates
+    // (sudo ensure-hosts) or the process is already root.
+    return false;
+  }
   if (platform() === 'win32') {
     return tryWindowsPrivilegePrompt(options);
   }
@@ -53,6 +58,17 @@ export function tryElevate(options: ElevationOptions): ElevationResult {
  */
 export function elevationHandled(elevated: ElevationResult): boolean {
   return elevated !== false;
+}
+
+/**
+ * Prints a notification when the process is running as root (uid 0),
+ * so the user knows the hosts file will be written directly without
+ * any elevation prompt. Called before the direct writeFileSync in cli.ts.
+ */
+export function notifyRootWrite(filePath: string): void {
+  if (typeof process.getuid === 'function' && process.getuid() === 0) {
+    console.log(`[ensure-hosts] Running as root; writing ${filePath} directly.`);
+  }
 }
 
 export function elevatedCommandHint(command = 'ensure-hosts'): string {
@@ -127,12 +143,12 @@ function tryMacOsPrivilegePrompt(options: ElevationOptions): ElevationResult {
   // Distinguish them so a real failure isn't misreported as "cancelled".
   const childFailed = /\[ensure-hosts\]|Error/i.test(childError);
   if (result.status === 1 && !childFailed) {
-    throw new Error('macOS administrator privilege request was cancelled.');
+    console.log('[ensure-hosts] macOS administrator privilege request was cancelled.');
+    return false;
   }
   const detail = childError ? `\n${childError}` : '';
-  throw new Error(
-    `macOS administrator privilege request failed: osascript exit=${result.status}.${detail}`
-  );
+  console.log(`[ensure-hosts] macOS administrator privilege request failed: osascript exit=${result.status}.${detail}`);
+  return false;
 }
 
 function tryWindowsPrivilegePrompt(options: ElevationOptions): ElevationResult {
@@ -195,9 +211,8 @@ function tryWindowsPrivilegePrompt(options: ElevationOptions): ElevationResult {
 
   const detail = [capturedOutput.trim(), result.stderr?.trim() ?? ''].filter(Boolean).join('\n');
   const suffix = detail ? `\n${detail}` : '';
-  throw new Error(
-    `Windows administrator privilege request failed or was cancelled: powershell exit=${result.status}.${suffix}`
-  );
+  console.log(`[ensure-hosts] Windows administrator privilege request failed or was cancelled: powershell exit=${result.status}.${suffix}`);
+  return false;
 }
 
 export function withoutElevationArgs(args: string[]): string[] {

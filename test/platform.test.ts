@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { resolveDefaultHostsPath, tryElevate, withoutElevationArgs } from '../src/platform.js';
+import { resolveDefaultHostsPath, tryElevate, withoutElevationArgs, notifyRootWrite } from '../src/platform.js';
 import type { ElevationOptions } from '../src/platform.js';
 
 describe('resolveDefaultHostsPath', () => {
@@ -161,5 +161,13 @@ describe('tryElevate darwin fallback chain', () => {
         dryRun: true,
       })
     ).toBe(false);
+  });
+});
+
+describe('notifyRootWrite', () => {
+  it('does not throw when not running as root', () => {
+    // On a normal dev machine or CI container we are not root, so
+    // notifyRootWrite should be a silent no-op that does not throw.
+    expect(() => notifyRootWrite('/etc/hosts')).not.toThrow();
   });
 });

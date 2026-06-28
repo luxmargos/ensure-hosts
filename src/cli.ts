@@ -13,7 +13,7 @@ import {
 } from './config.js';
 import { expandProfiles } from './domain-map.js';
 import { removeHostsContent, rewriteHostsContent } from './hosts.js';
-import { elevatedCommandHint, elevationHandled, resolveDefaultHostsPath, tryElevate } from './platform.js';
+import { elevatedCommandHint, elevationHandled, notifyRootWrite, resolveDefaultHostsPath, tryElevate } from './platform.js';
 import type { CliOptions } from './types.js';
 
 async function main(): Promise<void> {
@@ -51,6 +51,7 @@ async function main(): Promise<void> {
   }
 
   try {
+    notifyRootWrite(hostsFile);
     writeFileSync(hostsFile, result.content, 'utf8');
   } catch (error) {
     if (isPermissionError(error)) {
@@ -99,6 +100,7 @@ function runRemove(options: CliOptions, configPaths: string[], expandedProfiles:
   }
 
   try {
+    notifyRootWrite(hostsFile);
     writeFileSync(hostsFile, result.content, 'utf8');
   } catch (error) {
     if (isPermissionError(error)) {

@@ -44,6 +44,17 @@ export function tryElevate(options: ElevationOptions): ElevationResult {
   return false;
 }
 
+/**
+ * Returns true when an elevation attempt succeeded and the caller should
+ * exit cleanly (no Permission denied error). Any truthy ElevationResult
+ * (`'written'` from sudo tee / already-root, or `'spawned'` from the
+ * osascript/Windows GUI re-spawn) counts as success. `false` means no
+ * elevation happened and the caller should throw the sudo hint.
+ */
+export function elevationHandled(elevated: ElevationResult): boolean {
+  return elevated !== false;
+}
+
 export function elevatedCommandHint(command = 'ensure-hosts'): string {
   if (platform() === 'win32') {
     return `Windows: if the privilege prompt does not appear, run \`${command}\` in an elevated PowerShell.`;

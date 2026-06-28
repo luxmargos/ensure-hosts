@@ -13,7 +13,7 @@ import {
 } from './config.js';
 import { expandProfiles } from './domain-map.js';
 import { removeHostsContent, rewriteHostsContent } from './hosts.js';
-import { elevatedCommandHint, resolveDefaultHostsPath, tryElevate } from './platform.js';
+import { elevatedCommandHint, elevationHandled, resolveDefaultHostsPath, tryElevate } from './platform.js';
 import type { CliOptions } from './types.js';
 
 async function main(): Promise<void> {
@@ -65,7 +65,7 @@ async function main(): Promise<void> {
         filePath: hostsFile,
         content: result.content,
       });
-      if (elevated === 'spawned') {
+      if (elevationHandled(elevated)) {
         return;
       }
       throw new Error(
@@ -113,7 +113,7 @@ function runRemove(options: CliOptions, configPaths: string[], expandedProfiles:
         filePath: hostsFile,
         content: result.content,
       });
-      if (elevated === 'spawned') {
+      if (elevationHandled(elevated)) {
         return;
       }
       const modeFlag = force ? '--remove-force' : '--remove';

@@ -1,4 +1,4 @@
-import { readFileSync, unlinkSync } from 'node:fs';
+import { readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join, win32 } from 'node:path';
 import { platform } from 'node:os';
 import { spawnSync } from 'node:child_process';
@@ -13,12 +13,29 @@ export function tryElevate(options) {
         return false;
     }
     if (platform() === 'darwin') {
+        // Try sudo (mkcert-style) first — works in terminal contexts and avoids
+        // the noowners EPERM that osascript hits on external APFS volumes.
+        const sudoResult = tryMacOsSudoWrite(options.filePath, options.content);
+        if (sudoResult) {
+            return sudoResult;
+        }
+        // Fall back to osascript GUI prompt for non-terminal contexts.
         return tryMacOsPrivilegePrompt(options);
     }
     if (platform() === 'win32') {
         return tryWindowsPrivilegePrompt(options);
     }
     return false;
+}
+/**
+ * Returns true when an elevation attempt succeeded and the caller should
+ * exit cleanly (no Permission denied error). Any truthy ElevationResult
+ * (`'written'` from sudo tee / already-root, or `'spawned'` from the
+ * osascript/Windows GUI re-spawn) counts as success. `false` means no
+ * elevation happened and the caller should throw the sudo hint.
+ */
+export function elevationHandled(elevated) {
+    return elevated !== false;
 }
 export function elevatedCommandHint(command = 'ensure-hosts') {
     if (platform() === 'win32') {
@@ -29,8 +46,40 @@ export function elevatedCommandHint(command = 'ensure-hosts') {
     }
     return `Linux: run \`sudo ${command}\`.`;
 }
+function tryMacOsSudoWrite(filePath, content) {
+    // Already root → write directly, no sudo needed.
+    if (typeof process.getuid === 'function' && process.getuid() === 0) {
+        console.log(`[ensure-hosts] Already running as root; writing ${filePath} directly.`);
+        writeFileSync(filePath, content, 'utf8');
+        console.log(`[ensure-hosts] Updated ${filePath} as root.`);
+        return 'written';
+    }
+    // Check if sudo is available before attempting to prompt.
+    const which = spawnSync('which', ['sudo'], { stdio: 'ignore' });
+    if (which.status !== 0) {
+        return false;
+    }
+    // Run: sudo -- tee <filePath> with content piped via stdin.
+    // sudo reads the password from /dev/tty (the controlling terminal),
+    // so the user sees a terminal password prompt. Only tee runs as root;
+    // node stays as the normal user, avoiding noowners EPERM on external volumes.
+    console.log(`[ensure-hosts] sudo password required to update ${filePath}.`);
+    console.log('[ensure-hosts] Only `tee` runs as root; this process stays as the current user.');
+    const result = spawnSync('sudo', ['--', 'tee', filePath], {
+        input: content,
+        encoding: 'utf8',
+        stdio: ['pipe', 'ignore', 'inherit'],
+    });
+    if (result.status === 0) {
+        console.log(`[ensure-hosts] sudo tee updated ${filePath}.`);
+        return 'written';
+    }
+    console.log('[ensure-hosts] sudo elevation failed or was cancelled; falling back to GUI prompt...');
+    return false;
+}
 function tryMacOsPrivilegePrompt(options) {
-    console.log('[ensure-hosts] Requesting macOS administrator privileges.');
+    console.log('[ensure-hosts] Requesting macOS administrator privileges via osascript.');
+    console.log('[ensure-hosts] A GUI administrator password dialog will appear; re-running ensure-hosts as root.');
     const rerunArgs = [...withoutElevationArgs(options.args), '--elevated'];
     const command = [shellQuote(process.execPath), shellQuote(options.scriptPath), ...rerunArgs.map(shellQuote)].join(' ');
     const script = `do shell script ${appleScriptString(command)} with administrator privileges`;
@@ -46,7 +95,8 @@ function tryMacOsPrivilegePrompt(options) {
         process.stderr.write(result.stderr);
     }
     if (result.status === 0) {
-        return true;
+        console.log('[ensure-hosts] macOS administrator privileges granted; elevated child completed.');
+        return 'spawned';
     }
     const childError = result.stderr?.trim() ?? '';
     // osascript returns exit status 1 both when the user cancels the prompt and
@@ -108,7 +158,7 @@ function tryWindowsPrivilegePrompt(options) {
     }
     if (result.status === 0) {
         console.log('[ensure-hosts] Windows elevated hosts update completed.');
-        return true;
+        return 'spawned';
     }
     const detail = [capturedOutput.trim(), result.stderr?.trim() ?? ''].filter(Boolean).join('\n');
     const suffix = detail ? `\n${detail}` : '';

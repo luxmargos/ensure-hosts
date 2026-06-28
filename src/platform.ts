@@ -68,7 +68,9 @@ export function elevatedCommandHint(command = 'ensure-hosts'): string {
 function tryMacOsSudoWrite(filePath: string, content: string): ElevationResult {
   // Already root → write directly, no sudo needed.
   if (typeof process.getuid === 'function' && process.getuid() === 0) {
+    console.log(`[ensure-hosts] Already running as root; writing ${filePath} directly.`);
     writeFileSync(filePath, content, 'utf8');
+    console.log(`[ensure-hosts] Updated ${filePath} as root.`);
     return 'written';
   }
   // Check if sudo is available before attempting to prompt.
@@ -80,19 +82,24 @@ function tryMacOsSudoWrite(filePath: string, content: string): ElevationResult {
   // sudo reads the password from /dev/tty (the controlling terminal),
   // so the user sees a terminal password prompt. Only tee runs as root;
   // node stays as the normal user, avoiding noowners EPERM on external volumes.
+  console.log(`[ensure-hosts] sudo password required to update ${filePath}.`);
+  console.log('[ensure-hosts] Only `tee` runs as root; this process stays as the current user.');
   const result = spawnSync('sudo', ['--', 'tee', filePath], {
     input: content,
     encoding: 'utf8',
     stdio: ['pipe', 'ignore', 'inherit'],
   });
   if (result.status === 0) {
+    console.log(`[ensure-hosts] sudo tee updated ${filePath}.`);
     return 'written';
   }
+  console.log('[ensure-hosts] sudo elevation failed or was cancelled; falling back to GUI prompt...');
   return false;
 }
 
 function tryMacOsPrivilegePrompt(options: ElevationOptions): ElevationResult {
   console.log('[ensure-hosts] Requesting macOS administrator privileges via osascript.');
+  console.log('[ensure-hosts] A GUI administrator password dialog will appear; re-running ensure-hosts as root.');
   const rerunArgs = [...withoutElevationArgs(options.args), '--elevated'];
   const command = [shellQuote(process.execPath), shellQuote(options.scriptPath), ...rerunArgs.map(shellQuote)].join(' ');
   const script = `do shell script ${appleScriptString(command)} with administrator privileges`;
@@ -109,6 +116,7 @@ function tryMacOsPrivilegePrompt(options: ElevationOptions): ElevationResult {
     process.stderr.write(result.stderr);
   }
   if (result.status === 0) {
+    console.log('[ensure-hosts] macOS administrator privileges granted; elevated child completed.');
     return 'spawned';
   }
 

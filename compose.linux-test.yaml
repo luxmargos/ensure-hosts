@@ -10,6 +10,7 @@
 #   docker compose -f compose.linux-test.yaml run --rm dry-run
 #   docker compose -f compose.linux-test.yaml run --rm print-records
 #   docker compose -f compose.linux-test.yaml run --rm root-write
+#   docker compose -f compose.linux-test.yaml run --rm etc-hosts-write
 #   docker compose -f compose.linux-test.yaml run --rm non-root-fail
 #   docker compose -f compose.linux-test.yaml run --rm remove
 #
@@ -60,6 +61,23 @@ services:
       node dist/cli.js --config fixtures/simple.yaml --hosts-file /tmp/test-hosts &&
       echo '--- /tmp/test-hosts ---' &&
       cat /tmp/test-hosts
+      "
+
+  # Write the REAL /etc/hosts as root — verifies a root write to the
+  # default path with no --hosts-file override. The container is ephemeral
+  # (--rm), so the change dies with it and never touches the host system.
+  etc-hosts-write:
+    build:
+      context: .
+      dockerfile: Dockerfile.linux-test
+    user: root
+    command: >
+      sh -c "
+      echo '--- /etc/hosts before ---' &&
+      cat /etc/hosts &&
+      node dist/cli.js --config fixtures/simple.yaml &&
+      echo '--- /etc/hosts after ---' &&
+      cat /etc/hosts
       "
 
   # Run as non-root against an unwritable file — verifies the

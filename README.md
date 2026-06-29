@@ -161,8 +161,12 @@ docker compose -f compose.linux-test.yaml run --rm build
 docker compose -f compose.linux-test.yaml run --rm dry-run
 docker compose -f compose.linux-test.yaml run --rm print-records
 
-# Root write — verifies the "Running as root" notification
+# Root write — verifies the "Running as root" notification (temp file)
 docker compose -f compose.linux-test.yaml run --rm root-write
+
+# Root write to the REAL /etc/hosts — ephemeral container only (--rm),
+# the change never touches the host
+docker compose -f compose.linux-test.yaml run --rm etc-hosts-write
 
 # Non-root failure — verifies the "Permission denied" + sudo hint
 docker compose -f compose.linux-test.yaml run --rm non-root-fail

@@ -27,6 +27,7 @@ export interface CliOptions {
     hostsFile?: string;
     dryRun: boolean;
     printRecords: boolean;
+    repeatProfileComments: boolean;
     remove: boolean;
     removeForce: boolean;
     noElevate: boolean;

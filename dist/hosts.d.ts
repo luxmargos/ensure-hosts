@@ -8,7 +8,10 @@ export interface RemoveResult {
     content: string;
     removedDomains: string[];
 }
-export declare function rewriteHostsContent(content: string, profiles: ExpandedProfile[]): RewriteResult;
+export interface RewriteOptions {
+    repeatProfileComments?: boolean;
+}
+export declare function rewriteHostsContent(content: string, profiles: ExpandedProfile[], options?: RewriteOptions): RewriteResult;
 /**
  * Remove the domains managed by the given profiles from the hosts content,
  * without appending anything. This is the inverse of the default ensure

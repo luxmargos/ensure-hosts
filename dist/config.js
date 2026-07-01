@@ -10,6 +10,7 @@ export function parseCliOptions(argv) {
         envFileExplicit: false,
         dryRun: false,
         printRecords: false,
+        repeatProfileComments: false,
         remove: false,
         removeForce: false,
         noElevate: false,
@@ -63,6 +64,10 @@ export function parseCliOptions(argv) {
         }
         if (arg === '--print-records') {
             options.printRecords = true;
+            continue;
+        }
+        if (arg === '--repeat-profile-comments') {
+            options.repeatProfileComments = true;
             continue;
         }
         if (arg === '--remove') {
@@ -148,6 +153,9 @@ export function buildElevationArgs(options, configPaths) {
     }
     if (options.printRecords) {
         args.push('--print-records');
+    }
+    if (options.repeatProfileComments) {
+        args.push('--repeat-profile-comments');
     }
     if (options.remove) {
         args.push('--remove');
@@ -268,6 +276,7 @@ export function usage() {
         '  --hosts-file <path>  override hosts file path',
         '  --dry-run            print rewritten hosts content without writing',
         '  --print-records      print expanded records and exit',
+        '  --repeat-profile-comments  repeat profile comment before every generated host line',
         '  --remove             remove rewrite:true domains (respects rewrite:false)',
         '  --remove-force       remove all listed domains, including rewrite:false',
         '  --no-elevate         disable macOS/Windows privilege prompt',

@@ -1,9 +1,10 @@
-export function rewriteHostsContent(content, profiles) {
+export function rewriteHostsContent(content, profiles, options = {}) {
     const eol = detectEol(content);
     const hadFinalEol = content.endsWith('\n') || content.endsWith('\r\n');
     const sourceLines = splitLines(content);
     const cleanupDomains = new Set(profiles.flatMap(profile => profile.cleanupDomains));
     const profileNames = new Set(profiles.map(profile => profile.profile));
+    const domainProfiles = buildDomainProfileMap(profiles);
     const { lines: cleanedLines, removedDomains } = cleanupHostsLines(sourceLines, cleanupDomains, profileNames);
     const compactedLines = compactBlankRuns(cleanedLines);
     const appended = selectRecordsToAppend(compactedLines, profiles);
@@ -13,11 +14,13 @@ export function rewriteHostsContent(content, profiles) {
             nextLines.push('');
         }
         for (const record of appended) {
-            nextLines.push(`# ${record.profile}`);
             nextLines.push(`${record.address} ${record.domain}`);
         }
     }
-    const contentBody = nextLines.join(eol);
+    const formattedLines = formatManagedProfileComments(nextLines, domainProfiles, profileNames, {
+        repeatProfileComments: options.repeatProfileComments === true,
+    });
+    const contentBody = formattedLines.join(eol);
     const nextContent = contentBody.length > 0 ? `${contentBody}${eol}` : hadFinalEol ? eol : '';
     return {
         content: nextContent,
@@ -127,6 +130,58 @@ export function collectDomainsFromLines(lines) {
     }
     return domains;
 }
+function buildDomainProfileMap(profiles) {
+    const domainProfiles = new Map();
+    for (const profile of profiles) {
+        for (const record of profile.records) {
+            const domain = record.domain.toLowerCase();
+            if (!domainProfiles.has(domain)) {
+                domainProfiles.set(domain, record.profile);
+            }
+        }
+    }
+    return domainProfiles;
+}
+function formatManagedProfileComments(lines, domainProfiles, profileNames, options) {
+    const output = [];
+    let activeProfile = null;
+    for (const line of lines) {
+        const commentProfile = managedProfileComment(line, profileNames);
+        if (commentProfile) {
+            if (commentProfile !== activeProfile) {
+                activeProfile = null;
+            }
+            continue;
+        }
+        const profile = profileForHostsLine(line, domainProfiles);
+        if (!profile) {
+            output.push(line);
+            activeProfile = null;
+            continue;
+        }
+        if (options.repeatProfileComments || activeProfile !== profile) {
+            output.push(`# ${profile}`);
+        }
+        output.push(line);
+        activeProfile = profile;
+    }
+    return output;
+}
+function profileForHostsLine(line, domainProfiles) {
+    const body = stripInlineComment(line).trim();
+    if (!body) {
+        return null;
+    }
+    const [, ...hosts] = body.split(/\s+/);
+    const profiles = new Set();
+    for (const host of hosts) {
+        const profile = domainProfiles.get(host.toLowerCase());
+        if (profile) {
+            profiles.add(profile);
+        }
+    }
+    return profiles.size === 1 ? [...profiles][0] ?? null : null;
+}
 function cleanHostsLine(line, cleanupDomains) {
     if (cleanupDomains.size === 0) {
         return { line, changed: false, removedDomains: [] };
@@ -168,12 +223,15 @@ function cleanHostsLine(line, cleanupDomains) {
     };
 }
 function isManagedProfileComment(line, profileNames) {
+    return managedProfileComment(line, profileNames) !== null;
+}
+function managedProfileComment(line, profileNames) {
     const trimmed = line.trim();
     if (!trimmed.startsWith('#')) {
-        return false;
+        return null;
     }
     const label = trimmed.slice(1).trim();
-    return profileNames.has(label);
+    return profileNames.has(label) ? label : null;
 }
 function splitInlineComment(line) {
     const index = line.indexOf('#');

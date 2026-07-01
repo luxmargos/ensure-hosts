@@ -3,8 +3,8 @@ import { expandProfile } from '../src/domain-map.js';
 import { removeHostsContent, rewriteHostsContent } from '../src/hosts.js';
 import type { ProfileConfig } from '../src/types.js';
 
-function rewrite(before: string, profile: ProfileConfig): string {
-  return rewriteHostsContent(before, [expandProfile(profile)]).content;
+function rewrite(before: string, profile: ProfileConfig, repeatProfileComments = false): string {
+  return rewriteHostsContent(before, [expandProfile(profile)], { repeatProfileComments }).content;
 }
 
 function remove(before: string, profile: ProfileConfig, force = false): string {
@@ -62,7 +62,6 @@ describe('hosts rewriting samples', () => {
       '127.0.0.1 localhost\n\n' +
         '# PROFILE_NAME\n' +
         '192.168.1.111 site1.domain.test\n' +
-        '# PROFILE_NAME\n' +
         '127.0.0.1 site2.domain.test\n'
     );
   });
@@ -80,7 +79,6 @@ describe('hosts rewriting samples', () => {
         '127.0.0.1 another.domain.test\n\n' +
         '# PROFILE_NAME\n' +
         '192.168.1.111 site1.domain.test\n' +
-        '# PROFILE_NAME\n' +
         '127.0.0.1 site2.domain.test\n'
     );
   });
@@ -90,9 +88,7 @@ describe('hosts rewriting samples', () => {
       '127.0.0.1 localhost\n\n' +
         '# PROFILE_NAME\n' +
         '192.168.1.111 some.domain.test\n' +
-        '# PROFILE_NAME\n' +
         '192.168.1.111 sitea.some.domain.test\n' +
-        '# PROFILE_NAME\n' +
         '192.168.1.111 siteb.some.domain.test\n'
     );
   });
@@ -110,9 +106,7 @@ describe('hosts rewriting samples', () => {
         '127.0.0.1 another.domain\n\n' +
         '# PROFILE_NAME\n' +
         '192.168.1.111 some.domain.test\n' +
-        '# PROFILE_NAME\n' +
         '192.168.1.111 sitea.some.domain.test\n' +
-        '# PROFILE_NAME\n' +
         '192.168.1.111 siteb.some.domain.test\n'
     );
   });
@@ -122,7 +116,6 @@ describe('hosts rewriting samples', () => {
       '127.0.0.1 localhost\n\n' +
         '# PROFILE_NAME\n' +
         '192.168.1.111 sitea.some.domain.test\n' +
-        '# PROFILE_NAME\n' +
         '192.168.1.111 siteb.some.domain.test\n'
     );
   });
@@ -143,7 +136,6 @@ describe('hosts rewriting samples', () => {
         '127.0.0.1 another.domain\n\n' +
         '# PROFILE_NAME\n' +
         '192.168.1.111 sitea.some.domain.test\n' +
-        '# PROFILE_NAME\n' +
         '192.168.1.111 siteb.some.domain.test\n'
     );
   });
@@ -175,7 +167,7 @@ describe('hosts rewriting samples', () => {
 });
 
 describe('rewrite false and preservation behavior', () => {
-  it('does not touch existing same-domain lines for rewrite false', () => {
+  it('preserves rewrite false host lines while formatting managed block comments', () => {
     const profile: ProfileConfig = {
       profile: 'PROFILE_NAME',
       hosts: [
@@ -192,7 +184,51 @@ describe('rewrite false and preservation behavior', () => {
       '127.0.0.1 site2.domain.test\n' +
       '127.0.0.1 site3.domain.test\n';
 
-    expect(rewrite(before, profile)).toBe(before);
+    expect(rewrite(before, profile)).toBe(
+      '127.0.0.1 localhost\n\n' +
+        '# PROFILE_NAME\n' +
+        '192.168.1.111 site1.domain.test\n\n' +
+        '127.0.0.1 another.domain\n\n' +
+        '# PROFILE_NAME\n' +
+        '127.0.0.1 site2.domain.test\n' +
+        '127.0.0.1 site3.domain.test\n'
+    );
+  });
+
+  it('keeps separate managed comment blocks around unmanaged lines', () => {
+    const profile: ProfileConfig = {
+      profile: 'PROFILE_NAME',
+      hosts: [
+        { domain: 'a.iwonder.test', address: '127.0.0.1', rewrite: false },
+        { domain: 'b.iwonder.test', address: '127.0.0.1', rewrite: false },
+        { domain: 'edge-proxy.iwonder.test', address: '127.0.0.1' },
+        { domain: 'directus.iwonder.test', address: '127.0.0.1' },
+        { domain: 'hasura.iwonder.test', address: '127.0.0.1' },
+      ],
+    };
+    const before =
+      '# PROFILE_NAME\n' +
+      '127.0.0.1 a.iwonder.test\n' +
+      '# PROFILE_NAME\n' +
+      '127.0.0.1 b.iwonder.test\n\n' +
+      '127.0.0.1 another.unmanaged.host\n\n' +
+      '# PROFILE_NAME\n' +
+      '127.0.0.2 edge-proxy.iwonder.test\n' +
+      '# PROFILE_NAME\n' +
+      '127.0.0.2 directus.iwonder.test\n' +
+      '# PROFILE_NAME\n' +
+      '127.0.0.2 hasura.iwonder.test\n';
+
+    expect(rewrite(before, profile)).toBe(
+      '# PROFILE_NAME\n' +
+        '127.0.0.1 a.iwonder.test\n' +
+        '127.0.0.1 b.iwonder.test\n\n' +
+        '127.0.0.1 another.unmanaged.host\n\n' +
+        '# PROFILE_NAME\n' +
+        '127.0.0.1 edge-proxy.iwonder.test\n' +
+        '127.0.0.1 directus.iwonder.test\n' +
+        '127.0.0.1 hasura.iwonder.test\n'
+    );
   });
 
   it('appends a rewrite false record only when absent', () => {
@@ -212,7 +248,6 @@ describe('rewrite false and preservation behavior', () => {
       '127.0.0.1 localhost\r\n\r\n' +
         '# PROFILE_NAME\r\n' +
         '192.168.1.111 site1.domain.test\r\n' +
-        '# PROFILE_NAME\r\n' +
         '127.0.0.1 site2.domain.test\r\n'
     );
   });
@@ -227,6 +262,15 @@ describe('rewrite false and preservation behavior', () => {
       '# keep me\n' +
         '127.0.0.1\tlocalhost # local aliases\n' +
         '# another comment\n\n' +
+        '# PROFILE_NAME\n' +
+        '192.168.1.111 site1.domain.test\n' +
+        '127.0.0.1 site2.domain.test\n'
+    );
+  });
+
+  it('can repeat profile comments before every generated record', () => {
+    expect(rewrite('127.0.0.1 localhost\n', simpleProfile, true)).toBe(
+      '127.0.0.1 localhost\n\n' +
         '# PROFILE_NAME\n' +
         '192.168.1.111 site1.domain.test\n' +
         '# PROFILE_NAME\n' +

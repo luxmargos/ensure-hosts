@@ -6,7 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
-- No unreleased changes yet.
+### Added
+
+- `--repeat-profile-comments` to opt into writing the profile label before every generated hosts line.
+
+### Changed
+
+- Generated hosts entries now group profile comments once per contiguous managed block by default.
 
 ## [0.1.2] - 2026-07-01
 

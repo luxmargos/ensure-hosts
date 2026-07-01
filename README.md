@@ -216,6 +216,8 @@ With `rewrite: false`, `ensure-hosts`:
 
 Entries without an effective `address` are not written. If their effective `rewrite` value is `true`, matching existing entries can still be cleaned.
 
+Generated entries use one `# PROFILE_NAME` comment per contiguous managed block by default. Use `--repeat-profile-comments` when you want the profile comment repeated before every generated hosts line.
+
 ## Remove mode
 
 Use remove mode when you want to uninstall entries from a profile instead of ensuring them.
@@ -263,6 +265,7 @@ Use `--env-file <path>` if your dotenv file is not named `.env`.
 --hosts-file <path>  override hosts file path
 --dry-run            print rewritten hosts content without writing
 --print-records      print expanded records and exit
+--repeat-profile-comments  repeat profile comment before every generated host line
 --remove             remove rewrite:true domains (respects rewrite:false)
 --remove-force       remove all listed domains, including rewrite:false
 --no-elevate         disable macOS/Windows privilege prompt

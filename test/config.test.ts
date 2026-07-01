@@ -84,6 +84,14 @@ describe('remove flags', () => {
     expect(options.removeForce).toBe(false);
   });
 
+  it('defaults repeat profile comments to false', () => {
+    expect(parseCliOptions(['--config', 'a.yaml']).repeatProfileComments).toBe(false);
+  });
+
+  it('parses --repeat-profile-comments', () => {
+    expect(parseCliOptions(['--config', 'a.yaml', '--repeat-profile-comments']).repeatProfileComments).toBe(true);
+  });
+
   it('rejects --remove together with --remove-force', () => {
     expect(() => parseCliOptions(['--config', 'a.yaml', '--remove', '--remove-force'])).toThrow(
       /cannot be used together/
@@ -136,6 +144,15 @@ describe('buildElevationArgs', () => {
       resolve('a.yaml'),
       '--dry-run',
       '--print-records',
+    ]);
+  });
+
+  it('forwards --repeat-profile-comments to the elevated child', () => {
+    const options = parseCliOptions(['--config', 'a.yaml', '--repeat-profile-comments']);
+    expect(buildElevationArgs(options, ['a.yaml'])).toEqual([
+      '--config',
+      resolve('a.yaml'),
+      '--repeat-profile-comments',
     ]);
   });
 

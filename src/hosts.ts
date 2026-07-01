@@ -11,18 +11,27 @@ export interface RemoveResult {
   removedDomains: string[];
 }
 
+export interface RewriteOptions {
+  repeatProfileComments?: boolean;
+}
+
 interface CleanLineResult {
   line: string | null;
   changed: boolean;
   removedDomains: string[];
 }
 
-export function rewriteHostsContent(content: string, profiles: ExpandedProfile[]): RewriteResult {
+export function rewriteHostsContent(
+  content: string,
+  profiles: ExpandedProfile[],
+  options: RewriteOptions = {}
+): RewriteResult {
   const eol = detectEol(content);
   const hadFinalEol = content.endsWith('\n') || content.endsWith('\r\n');
   const sourceLines = splitLines(content);
   const cleanupDomains = new Set(profiles.flatMap(profile => profile.cleanupDomains));
   const profileNames = new Set(profiles.map(profile => profile.profile));
+  const domainProfiles = buildDomainProfileMap(profiles);
 
   const { lines: cleanedLines, removedDomains } = cleanupHostsLines(sourceLines, cleanupDomains, profileNames);
   const compactedLines = compactBlankRuns(cleanedLines);
@@ -34,12 +43,14 @@ export function rewriteHostsContent(content: string, profiles: ExpandedProfile[]
       nextLines.push('');
     }
     for (const record of appended) {
-      nextLines.push(`# ${record.profile}`);
       nextLines.push(`${record.address} ${record.domain}`);
     }
   }
 
-  const contentBody = nextLines.join(eol);
+  const formattedLines = formatManagedProfileComments(nextLines, domainProfiles, profileNames, {
+    repeatProfileComments: options.repeatProfileComments === true,
+  });
+  const contentBody = formattedLines.join(eol);
   const nextContent = contentBody.length > 0 ? `${contentBody}${eol}` : hadFinalEol ? eol : '';
 
   return {
@@ -175,6 +186,72 @@ export function collectDomainsFromLines(lines: string[]): Set<string> {
   return domains;
 }
 
+function buildDomainProfileMap(profiles: ExpandedProfile[]): Map<string, string> {
+  const domainProfiles = new Map<string, string>();
+  for (const profile of profiles) {
+    for (const record of profile.records) {
+      const domain = record.domain.toLowerCase();
+      if (!domainProfiles.has(domain)) {
+        domainProfiles.set(domain, record.profile);
+      }
+    }
+  }
+  return domainProfiles;
+}
+
+function formatManagedProfileComments(
+  lines: string[],
+  domainProfiles: Map<string, string>,
+  profileNames: Set<string>,
+  options: { repeatProfileComments: boolean }
+): string[] {
+  const output: string[] = [];
+  let activeProfile: string | null = null;
+
+  for (const line of lines) {
+    const commentProfile = managedProfileComment(line, profileNames);
+    if (commentProfile) {
+      if (commentProfile !== activeProfile) {
+        activeProfile = null;
+      }
+      continue;
+    }
+
+    const profile = profileForHostsLine(line, domainProfiles);
+    if (!profile) {
+      output.push(line);
+      activeProfile = null;
+      continue;
+    }
+
+    if (options.repeatProfileComments || activeProfile !== profile) {
+      output.push(`# ${profile}`);
+    }
+    output.push(line);
+    activeProfile = profile;
+  }
+
+  return output;
+}
+
+function profileForHostsLine(line: string, domainProfiles: Map<string, string>): string | null {
+  const body = stripInlineComment(line).trim();
+  if (!body) {
+    return null;
+  }
+
+  const [, ...hosts] = body.split(/\s+/);
+  const profiles = new Set<string>();
+  for (const host of hosts) {
+    const profile = domainProfiles.get(host.toLowerCase());
+    if (profile) {
+      profiles.add(profile);
+    }
+  }
+
+  return profiles.size === 1 ? [...profiles][0] ?? null : null;
+}
+
 function cleanHostsLine(line: string, cleanupDomains: Set<string>): CleanLineResult {
   if (cleanupDomains.size === 0) {
     return { line, changed: false, removedDomains: [] };
@@ -224,12 +301,16 @@ function cleanHostsLine(line: string, cleanupDomains: Set<string>): CleanLineRes
 }
 
 function isManagedProfileComment(line: string, profileNames: Set<string>): boolean {
+  return managedProfileComment(line, profileNames) !== null;
+}
+
+function managedProfileComment(line: string, profileNames: Set<string>): string | null {
   const trimmed = line.trim();
   if (!trimmed.startsWith('#')) {
-    return false;
+    return null;
   }
   const label = trimmed.slice(1).trim();
-  return profileNames.has(label);
+  return profileNames.has(label) ? label : null;
 }
 
 function splitInlineComment(line: string): { body: string; comment: string } {

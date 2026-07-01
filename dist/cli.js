@@ -23,7 +23,9 @@ async function main() {
     }
     const hostsFile = resolveHostsFileOverride(options) ?? resolveDefaultHostsPath();
     const hostsContent = readFileSync(hostsFile, 'utf8');
-    const result = rewriteHostsContent(hostsContent, expandedProfiles);
+    const result = rewriteHostsContent(hostsContent, expandedProfiles, {
+        repeatProfileComments: options.repeatProfileComments,
+    });
     if (options.dryRun) {
         process.stdout.write(result.content);
         return;

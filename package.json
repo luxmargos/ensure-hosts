@@ -1,6 +1,6 @@
 {
   "name": "@luxmargos/ensure-hosts",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "CLI for managing hosts file entries from YAML profiles.",
   "type": "module",
   "bin": {

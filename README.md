@@ -36,7 +36,9 @@ ensure-hosts --version
 
 ## Quick start
 
-1. Create a config file, for example `hosts.local.yaml`:
+1. Create a config file, for example `hosts.local.yaml`. You can use either the **subdomains** style or the **flat** style — both produce the same records:
+
+   **Subdomains style** — group children under a parent domain:
 
    ```yaml
    profile: MYAPP_LOCAL
@@ -46,6 +48,19 @@ ensure-hosts --version
        children:
          - api
          - admin
+   ```
+
+   **Flat style** — list every domain side by side at the top level:
+
+   ```yaml
+   profile: MYAPP_LOCAL
+   hosts:
+     - domain: myapp.test
+       address: 127.0.0.1
+     - domain: api.myapp.test
+       address: 127.0.0.1
+     - domain: admin.myapp.test
+       address: 127.0.0.1
    ```
 
 2. Preview what would be written:

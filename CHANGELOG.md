@@ -8,6 +8,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - No unreleased changes yet.
 
+## [0.1.1] - 2026-07-01
+
+### Added
+
+- Documentation for the flat list config layout as an alternative to nested `children`.
+- Quick start example showing both subdomains and flat list styles.
+
 ## [0.1.0] - 2026-06-30
 
 ### Added

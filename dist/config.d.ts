@@ -18,4 +18,5 @@ export declare function resolveNoElevate(options: CliOptions, env?: NodeJS.Proce
 export declare function buildElevationArgs(options: CliOptions, configPaths: string[]): string[];
 export declare function loadProfiles(configPaths: string[]): ProfileConfig[];
 export declare function loadProfile(configPath: string): ProfileConfig;
+export declare function packageVersion(): string;
 export declare function usage(): string;

@@ -1,4 +1,4 @@
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -6,6 +6,7 @@ import {
   buildElevationArgs,
   loadDefaultEnv,
   loadProfile,
+  packageVersion,
   parseCliOptions,
   resolveConfigPaths,
 } from '../src/config.js';
@@ -53,6 +54,14 @@ describe('config loading', () => {
 
   it('does not fail when dotenv file is missing', () => {
     expect(() => loadDefaultEnv(join(tmpdir(), 'missing-ensure-hosts.env'))).not.toThrow();
+  });
+
+  it('reads the CLI version from package metadata', () => {
+    const packageJson = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as {
+      version: string;
+    };
+
+    expect(packageVersion()).toBe(packageJson.version);
   });
 });
 

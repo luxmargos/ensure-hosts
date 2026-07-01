@@ -248,8 +248,15 @@ function printHelpAndExit(code) {
     process.exit(code);
 }
 function printVersionAndExit() {
-    console.log('0.1.0');
+    console.log(packageVersion());
     process.exit(0);
+}
+export function packageVersion() {
+    const packageJson = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+    if (typeof packageJson.version !== 'string' || packageJson.version.trim() === '') {
+        throw new Error('package.json must define a non-empty version.');
+    }
+    return packageJson.version;
 }
 export function usage() {
     return [

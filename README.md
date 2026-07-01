@@ -128,7 +128,7 @@ Fields:
 | `skipSelf` | No | Skip writing this node while still processing its children. Defaults to `false`. |
 | `children` | No | Nested subdomains as strings or full objects. |
 
-### Child domains
+### Subdomains
 
 Child strings inherit the parent address and `rewrite` value:
 
@@ -149,6 +149,23 @@ This writes:
 - `admin.example.test`
 
 If a child already contains the full parent domain, it is not duplicated. For example, `api.example.test` stays `api.example.test`.
+
+### As a flat list
+
+If you'd rather spell every domain out instead of using `children:`, you can list them side by side at the top level. The result is the same as the nested form above:
+
+```yaml
+profile: LOCAL
+hosts:
+  - domain: example.test
+    address: 127.0.0.1
+  - domain: api.example.test
+    address: 127.0.0.1
+  - domain: admin.example.test
+    address: 127.0.0.1
+```
+
+This is handy when you're building the config from a script, or when you simply prefer reading a flat list. `address`, `rewrite`, and `skipSelf` can still be set on any entry.
 
 ### `skipSelf` example
 

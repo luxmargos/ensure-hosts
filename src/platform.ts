@@ -117,7 +117,7 @@ function tryMacOsPrivilegePrompt(options: ElevationOptions): ElevationResult {
   console.log('[ensure-hosts] Requesting macOS administrator privileges via osascript.');
   console.log('[ensure-hosts] A GUI administrator password dialog will appear; re-running ensure-hosts as root.');
   const rerunArgs = [...withoutElevationArgs(options.args), '--elevated'];
-  const command = [shellQuote(process.execPath), shellQuote(options.scriptPath), ...rerunArgs.map(shellQuote)].join(' ');
+  const command = [shellQuote(process.execPath), '--', shellQuote(options.scriptPath), ...rerunArgs.map(shellQuote)].join(' ');
   const script = `do shell script ${appleScriptString(command)} with administrator privileges`;
   const result = spawnSync('osascript', ['-e', script], {
     cwd: options.cwd,
@@ -161,6 +161,7 @@ function tryWindowsPrivilegePrompt(options: ElevationOptions): ElevationResult {
   const command = [
     'try {',
     `$proc = Start-Process -FilePath ${powerShellString(process.execPath)} -ArgumentList @(${[
+      '--',
       options.scriptPath,
       ...rerunArgs,
     ]

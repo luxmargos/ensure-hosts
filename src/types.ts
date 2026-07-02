@@ -24,10 +24,18 @@ export interface ExpandedProfile {
   cleanupDomains: string[];
 }
 
+export type EnvOverrideMode = 'overwrite' | 'respect';
+
+export type EnvFileMissingMode = 'ignore' | 'error';
+
 export interface CliOptions {
   configPaths: string[];
-  envFile: string;
-  envFileExplicit: boolean;
+  envFiles: string[];
+  envFilesExplicit: boolean;
+  envOverride?: EnvOverrideMode;
+  envOverrideExplicit: boolean;
+  envFileMissing?: EnvFileMissingMode;
+  envFileMissingExplicit: boolean;
   hostsFile?: string;
   dryRun: boolean;
   printRecords: boolean;

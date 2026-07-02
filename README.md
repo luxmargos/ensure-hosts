@@ -235,7 +235,23 @@ ensure-hosts --config ./hosts.local.yaml --remove --dry-run
 
 ## Environment variables
 
-The CLI automatically loads `.env` from the current working directory. Missing `.env` files and missing environment variables are ignored.
+The CLI automatically loads `.env` from the current working directory. Missing `.env` files are ignored by default.
+
+Use `--env-file <path>` if your dotenv file is not named `.env`. The option is repeatable and files are loaded in order:
+
+```sh
+ensure-hosts --env-file .env --env-file .env.local --config ./hosts.yaml
+```
+
+By default, later dotenv files overwrite existing values, including shell environment variables and values from earlier dotenv files. Use `respect` mode to keep existing values:
+
+```sh
+ensure-hosts --env-override respect --env-file .env --env-file .env.local --config ./hosts.yaml
+```
+
+You can also set the mode with `ENSURE_HOSTS_ENV_OVERRIDE=overwrite` or `ENSURE_HOSTS_ENV_OVERRIDE=respect`. CLI options take precedence over environment variables.
+
+Missing dotenv files are skipped by default. Use `--env-file-missing error` or `ENSURE_HOSTS_ENV_FILE_MISSING=error` to fail when an expected dotenv file does not exist.
 
 You can provide config paths with `ENSURE_HOSTS_CONFIG` instead of `--config`:
 
@@ -255,13 +271,28 @@ To disable macOS/Windows elevation prompts:
 ENSURE_HOSTS_NO_ELEVATE=true
 ```
 
-Use `--env-file <path>` if your dotenv file is not named `.env`.
+YAML config files support Docker Compose-like variable interpolation after dotenv files are loaded:
+
+```yaml
+profile: "${PROFILE_NAME:-LOCAL}"
+hosts:
+  - domain: "${APP_DOMAIN}"
+    address: "${APP_ADDRESS-127.0.0.1}"
+```
+
+Supported forms:
+
+- `${VAR_NAME}` expands to the environment value. If missing, it expands to an empty string and prints an `[ensure-hosts]` warning.
+- `${VAR_NAME:-default}` uses `default` when the variable is unset or empty.
+- `${VAR_NAME-default}` uses `default` only when the variable is unset.
 
 ## CLI options
 
 ```txt
 --config <path>      YAML/YML config file path (repeatable)
---env-file <path>    dotenv file path (default: .env)
+--env-file <path>    dotenv file path (default: .env, repeatable)
+--env-override <mode>  dotenv collision mode: overwrite|respect (default: overwrite)
+--env-file-missing <mode>  missing dotenv mode: ignore|error (default: ignore)
 --hosts-file <path>  override hosts file path
 --dry-run            print rewritten hosts content without writing
 --print-records      print expanded records and exit

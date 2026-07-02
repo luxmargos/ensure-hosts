@@ -1,7 +1,7 @@
-#!/usr/bin/env node
+#!/usr/bin/env -S node --
 import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { buildElevationArgs, loadDefaultEnv, loadProfiles, parseCliOptions, resolveConfigPaths, resolveHostsFileOverride, resolveNoElevate, } from './config.js';
+import { buildElevationArgs, loadDefaultEnv, loadProfiles, parseCliOptions, resolveConfigPaths, resolveEnvFileMissing, resolveEnvOverride, resolveHostsFileOverride, resolveNoElevate, } from './config.js';
 import { expandProfiles } from './domain-map.js';
 import { removeHostsContent, rewriteHostsContent } from './hosts.js';
 import { elevatedCommandHint, elevationHandled, notifyRootWrite, resolveDefaultHostsPath, tryElevate } from './platform.js';
@@ -10,7 +10,9 @@ async function main() {
     if (options.outputFile) {
         redirectConsoleToFile(options.outputFile);
     }
-    loadDefaultEnv(options.envFile);
+    const envOverride = resolveEnvOverride(options);
+    const envFileMissing = resolveEnvFileMissing(options);
+    loadDefaultEnv(options, envOverride, envFileMissing);
     const configPaths = resolveConfigPaths(options);
     const profiles = loadProfiles(configPaths);
     const expandedProfiles = expandProfiles(profiles);

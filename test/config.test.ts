@@ -4,11 +4,14 @@ import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   buildElevationArgs,
+  interpolateEnv,
   loadDefaultEnv,
   loadProfile,
   packageVersion,
   parseCliOptions,
   resolveConfigPaths,
+  resolveEnvFileMissing,
+  resolveEnvOverride,
 } from '../src/config.js';
 
 describe('config loading', () => {
@@ -45,6 +48,29 @@ describe('config loading', () => {
     expect(parseCliOptions(['--config', 'a.yaml', '--config=b.yml']).configPaths).toEqual(['a.yaml', 'b.yml']);
   });
 
+  it('supports repeated --env-file options', () => {
+    const options = parseCliOptions(['--env-file', 'base.env', '--env-file=local.env']);
+    expect(options.envFiles).toEqual(['base.env', 'local.env']);
+    expect(options.envFilesExplicit).toBe(true);
+  });
+
+  it('parses env behavior options', () => {
+    const options = parseCliOptions([
+      '--env-override',
+      'respect',
+      '--env-file-missing=error',
+    ]);
+    expect(options.envOverride).toBe('respect');
+    expect(options.envOverrideExplicit).toBe(true);
+    expect(options.envFileMissing).toBe('error');
+    expect(options.envFileMissingExplicit).toBe(true);
+  });
+
+  it('rejects invalid env behavior options', () => {
+    expect(() => parseCliOptions(['--env-override', 'replace'])).toThrow(/overwrite, respect/);
+    expect(() => parseCliOptions(['--env-file-missing', 'skip'])).toThrow(/ignore, error/);
+  });
+
   it('uses ENSURE_HOSTS_CONFIG when --config is omitted', () => {
     expect(resolveConfigPaths(parseCliOptions([]), { ENSURE_HOSTS_CONFIG: 'a.yaml,b.yml' })).toEqual([
       join(process.cwd(), 'a.yaml'),
@@ -52,8 +78,122 @@ describe('config loading', () => {
     ]);
   });
 
-  it('does not fail when dotenv file is missing', () => {
+  it('resolves env override with CLI, env var, and default precedence', () => {
+    expect(resolveEnvOverride(parseCliOptions(['--env-override', 'respect']), { ENSURE_HOSTS_ENV_OVERRIDE: 'overwrite' })).toBe(
+      'respect'
+    );
+    expect(resolveEnvOverride(parseCliOptions([]), { ENSURE_HOSTS_ENV_OVERRIDE: 'respect' })).toBe('respect');
+    expect(resolveEnvOverride(parseCliOptions([]), {})).toBe('overwrite');
+  });
+
+  it('resolves missing env-file mode with CLI, env var, and default precedence', () => {
+    expect(
+      resolveEnvFileMissing(parseCliOptions(['--env-file-missing', 'error']), {
+        ENSURE_HOSTS_ENV_FILE_MISSING: 'ignore',
+      })
+    ).toBe('error');
+    expect(resolveEnvFileMissing(parseCliOptions([]), { ENSURE_HOSTS_ENV_FILE_MISSING: 'error' })).toBe('error');
+    expect(resolveEnvFileMissing(parseCliOptions([]), {})).toBe('ignore');
+  });
+
+  it('does not fail when dotenv file is missing in ignore mode', () => {
     expect(() => loadDefaultEnv(join(tmpdir(), 'missing-ensure-hosts.env'))).not.toThrow();
+  });
+
+  it('fails when dotenv file is missing in error mode', () => {
+    expect(() => loadDefaultEnv(join(tmpdir(), 'missing-ensure-hosts.env'), 'overwrite', 'error')).toThrow(
+      /Environment file not found/
+    );
+  });
+
+  it('loads multiple dotenv files in order with overwrite mode', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ensure-hosts-'));
+    const base = join(dir, 'base.env');
+    const local = join(dir, 'local.env');
+    const key = 'ENSURE_HOSTS_TEST_OVERWRITE';
+    writeFileSync(base, `${key}=base\n`);
+    writeFileSync(local, `${key}=local\n`);
+
+    const previous = process.env[key];
+    process.env[key] = 'shell';
+    try {
+      loadDefaultEnv([base, local], 'overwrite', 'error');
+      expect(process.env[key]).toBe('local');
+    } finally {
+      restoreEnv(key, previous);
+    }
+  });
+
+  it('loads multiple dotenv files in order with respect mode', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ensure-hosts-'));
+    const base = join(dir, 'base.env');
+    const local = join(dir, 'local.env');
+    const shellKey = 'ENSURE_HOSTS_TEST_RESPECT_SHELL';
+    const fileKey = 'ENSURE_HOSTS_TEST_RESPECT_FILE';
+    writeFileSync(base, [`${shellKey}=base`, `${fileKey}=base`].join('\n'));
+    writeFileSync(local, [`${shellKey}=local`, `${fileKey}=local`].join('\n'));
+
+    const previousShell = process.env[shellKey];
+    const previousFile = process.env[fileKey];
+    process.env[shellKey] = 'shell';
+    delete process.env[fileKey];
+    try {
+      loadDefaultEnv([base, local], 'respect', 'error');
+      expect(process.env[shellKey]).toBe('shell');
+      expect(process.env[fileKey]).toBe('base');
+    } finally {
+      restoreEnv(shellKey, previousShell);
+      restoreEnv(fileKey, previousFile);
+    }
+  });
+
+  it('interpolates environment variables before YAML parsing', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ensure-hosts-'));
+    const configPath = join(dir, 'hosts.yaml');
+    writeFileSync(
+      configPath,
+      [
+        'profile: "${PROFILE_NAME}"',
+        'hosts:',
+        '  - domain: "${HOST_DOMAIN}"',
+        '    address: "${HOST_ADDRESS:-127.0.0.1}"',
+        '    children:',
+        '      - "${CHILD_DOMAIN-default-child}"',
+      ].join('\n')
+    );
+
+    expect(
+      loadProfile(configPath, {
+        PROFILE_NAME: 'FROM_ENV',
+        HOST_DOMAIN: 'example.test',
+      })
+    ).toEqual({
+      profile: 'FROM_ENV',
+      hosts: [
+        {
+          domain: 'example.test',
+          address: '127.0.0.1',
+          children: [{ domain: 'default-child' }],
+        },
+      ],
+    });
+  });
+
+  it('supports Docker Compose-like interpolation defaults', () => {
+    expect(
+      interpolateEnv('${SET:-fallback}|${EMPTY:-fallback}|${EMPTY-fallback}|${UNSET-fallback}', {
+        SET: 'value',
+        EMPTY: '',
+      })
+    ).toBe('value|fallback||fallback');
+  });
+
+  it('expands plain missing variables to empty strings and warns', () => {
+    const warnings: string[] = [];
+    expect(interpolateEnv('a${MISSING_ENSURE_HOSTS_TEST}b', {}, message => warnings.push(message))).toBe('ab');
+    expect(warnings).toEqual([
+      '[ensure-hosts] Environment variable MISSING_ENSURE_HOSTS_TEST is not set; substituting an empty string.',
+    ]);
   });
 
   it('reads the CLI version from package metadata', () => {
@@ -131,6 +271,31 @@ describe('buildElevationArgs', () => {
     expect(buildElevationArgs(options, ['a.yaml'])).toContain(resolve('secrets.env'));
   });
 
+  it('includes repeated env files and explicit env modes', () => {
+    const options = parseCliOptions([
+      '--config',
+      'a.yaml',
+      '--env-file',
+      'base.env',
+      '--env-file=local.env',
+      '--env-override',
+      'respect',
+      '--env-file-missing=error',
+    ]);
+    expect(buildElevationArgs(options, ['a.yaml'])).toEqual([
+      '--config',
+      resolve('a.yaml'),
+      '--env-file',
+      resolve('base.env'),
+      '--env-file',
+      resolve('local.env'),
+      '--env-override',
+      'respect',
+      '--env-file-missing',
+      'error',
+    ]);
+  });
+
   it('includes resolved --hosts-file when provided', () => {
     const options = parseCliOptions(['--config', 'a.yaml', '--hosts-file', 'tmp/hosts']);
     expect(buildElevationArgs(options, ['a.yaml'])).toContain('--hosts-file');
@@ -205,3 +370,11 @@ describe('buildElevationArgs', () => {
     expect(args).not.toContain('--remove-force');
   });
 });
+
+function restoreEnv(key: string, previous: string | undefined): void {
+  if (previous === undefined) {
+    delete process.env[key];
+    return;
+  }
+  process.env[key] = previous;
+}

@@ -1,6 +1,8 @@
-import type { CliOptions, ProfileConfig } from './types.js';
+import type { CliOptions, EnvFileMissingMode, EnvOverrideMode, ProfileConfig } from './types.js';
 export declare function parseCliOptions(argv: string[]): CliOptions;
-export declare function loadDefaultEnv(envFile: string): void;
+export declare function resolveEnvOverride(options: CliOptions, env?: NodeJS.ProcessEnv): EnvOverrideMode;
+export declare function resolveEnvFileMissing(options: CliOptions, env?: NodeJS.ProcessEnv): EnvFileMissingMode;
+export declare function loadDefaultEnv(optionsOrEnvFiles: CliOptions | string | string[], overrideMode?: EnvOverrideMode, missingMode?: EnvFileMissingMode): void;
 export declare function resolveConfigPaths(options: CliOptions, env?: NodeJS.ProcessEnv): string[];
 export declare function resolveHostsFileOverride(options: CliOptions, env?: NodeJS.ProcessEnv): string | undefined;
 export declare function resolveNoElevate(options: CliOptions, env?: NodeJS.ProcessEnv): boolean;
@@ -17,6 +19,7 @@ export declare function resolveNoElevate(options: CliOptions, env?: NodeJS.Proce
  */
 export declare function buildElevationArgs(options: CliOptions, configPaths: string[]): string[];
 export declare function loadProfiles(configPaths: string[]): ProfileConfig[];
-export declare function loadProfile(configPath: string): ProfileConfig;
+export declare function loadProfile(configPath: string, env?: NodeJS.ProcessEnv): ProfileConfig;
+export declare function interpolateEnv(content: string, env?: NodeJS.ProcessEnv, warn?: (message: string) => void): string;
 export declare function packageVersion(): string;
 export declare function usage(): string;

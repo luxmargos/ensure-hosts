@@ -2,15 +2,23 @@ import { existsSync, readFileSync } from 'node:fs';
 import { delimiter, resolve } from 'node:path';
 import { config as loadDotenv } from 'dotenv';
 import { parse as parseYaml } from 'yaml';
-import type { CliOptions, HostNodeConfig, ProfileConfig } from './types.js';
+import type {
+  CliOptions,
+  EnvFileMissingMode,
+  EnvOverrideMode,
+  HostNodeConfig,
+  ProfileConfig,
+} from './types.js';
 
 const DEFAULT_ENV_FILE = '.env';
 
 export function parseCliOptions(argv: string[]): CliOptions {
   const options: CliOptions = {
     configPaths: [],
-    envFile: DEFAULT_ENV_FILE,
-    envFileExplicit: false,
+    envFiles: [],
+    envFilesExplicit: false,
+    envOverrideExplicit: false,
+    envFileMissingExplicit: false,
     dryRun: false,
     printRecords: false,
     repeatProfileComments: false,
@@ -38,13 +46,39 @@ export function parseCliOptions(argv: string[]): CliOptions {
       continue;
     }
     if (arg === '--env-file') {
-      options.envFile = requireValue(argv, ++index, '--env-file');
-      options.envFileExplicit = true;
+      options.envFiles.push(requireValue(argv, ++index, '--env-file'));
+      options.envFilesExplicit = true;
       continue;
     }
     if (arg.startsWith('--env-file=')) {
-      options.envFile = arg.slice('--env-file='.length);
-      options.envFileExplicit = true;
+      options.envFiles.push(arg.slice('--env-file='.length));
+      options.envFilesExplicit = true;
+      continue;
+    }
+    if (arg === '--env-override') {
+      options.envOverride = parseEnvOverrideMode(requireValue(argv, ++index, '--env-override'), '--env-override');
+      options.envOverrideExplicit = true;
+      continue;
+    }
+    if (arg.startsWith('--env-override=')) {
+      options.envOverride = parseEnvOverrideMode(arg.slice('--env-override='.length), '--env-override');
+      options.envOverrideExplicit = true;
+      continue;
+    }
+    if (arg === '--env-file-missing') {
+      options.envFileMissing = parseEnvFileMissingMode(
+        requireValue(argv, ++index, '--env-file-missing'),
+        '--env-file-missing'
+      );
+      options.envFileMissingExplicit = true;
+      continue;
+    }
+    if (arg.startsWith('--env-file-missing=')) {
+      options.envFileMissing = parseEnvFileMissingMode(
+        arg.slice('--env-file-missing='.length),
+        '--env-file-missing'
+      );
+      options.envFileMissingExplicit = true;
       continue;
     }
     if (arg === '--hosts-file') {
@@ -109,12 +143,58 @@ function assertCompatibleModes(options: CliOptions): void {
   }
 }
 
-export function loadDefaultEnv(envFile: string): void {
-  const resolved = resolve(envFile);
-  if (!existsSync(resolved)) {
-    return;
+export function resolveEnvOverride(options: CliOptions, env = process.env): EnvOverrideMode {
+  if (options.envOverride) {
+    return options.envOverride;
   }
-  loadDotenv({ path: resolved, override: false });
+
+  const fromEnv = env.ENSURE_HOSTS_ENV_OVERRIDE?.trim();
+  if (!fromEnv) {
+    return 'overwrite';
+  }
+
+  return parseEnvOverrideMode(fromEnv, 'ENSURE_HOSTS_ENV_OVERRIDE');
+}
+
+export function resolveEnvFileMissing(options: CliOptions, env = process.env): EnvFileMissingMode {
+  if (options.envFileMissing) {
+    return options.envFileMissing;
+  }
+
+  const fromEnv = env.ENSURE_HOSTS_ENV_FILE_MISSING?.trim();
+  if (!fromEnv) {
+    return 'ignore';
+  }
+
+  return parseEnvFileMissingMode(fromEnv, 'ENSURE_HOSTS_ENV_FILE_MISSING');
+}
+
+export function loadDefaultEnv(
+  optionsOrEnvFiles: CliOptions | string | string[],
+  overrideMode: EnvOverrideMode = 'overwrite',
+  missingMode: EnvFileMissingMode = 'ignore'
+): void {
+  const envFiles = resolveEnvFilesToLoad(optionsOrEnvFiles);
+  for (const envFile of envFiles) {
+    const resolved = resolve(envFile);
+    if (!existsSync(resolved)) {
+      if (missingMode === 'error') {
+        throw new Error(`Environment file not found: ${resolved}`);
+      }
+      continue;
+    }
+    loadDotenv({ path: resolved, override: overrideMode === 'overwrite' });
+  }
+}
+
+function resolveEnvFilesToLoad(optionsOrEnvFiles: CliOptions | string | string[]): string[] {
+  if (typeof optionsOrEnvFiles === 'string') {
+    return [optionsOrEnvFiles];
+  }
+  if (Array.isArray(optionsOrEnvFiles)) {
+    return optionsOrEnvFiles;
+  }
+  return optionsOrEnvFiles.envFilesExplicit ? optionsOrEnvFiles.envFiles : [DEFAULT_ENV_FILE];
 }
 
 export function resolveConfigPaths(options: CliOptions, env = process.env): string[] {
@@ -159,8 +239,16 @@ export function buildElevationArgs(options: CliOptions, configPaths: string[]): 
   // --env-file as its own flag (even after the script path) and exits with an
   // error if the file is missing, so emitting it unconditionally would crash
   // the elevated child whenever the default .env is absent.
-  if (options.envFileExplicit) {
-    args.push('--env-file', resolve(options.envFile));
+  if (options.envFilesExplicit) {
+    for (const envFile of options.envFiles) {
+      args.push('--env-file', resolve(envFile));
+    }
+  }
+  if (options.envOverrideExplicit && options.envOverride) {
+    args.push('--env-override', options.envOverride);
+  }
+  if (options.envFileMissingExplicit && options.envFileMissing) {
+    args.push('--env-file-missing', options.envFileMissing);
   }
   if (options.hostsFile) {
     args.push('--hosts-file', resolve(options.hostsFile));
@@ -185,16 +273,46 @@ export function buildElevationArgs(options: CliOptions, configPaths: string[]): 
 }
 
 export function loadProfiles(configPaths: string[]): ProfileConfig[] {
-  return configPaths.map(loadProfile);
+  return configPaths.map(configPath => loadProfile(configPath));
 }
 
-export function loadProfile(configPath: string): ProfileConfig {
+export function loadProfile(configPath: string, env = process.env): ProfileConfig {
   if (!/\.ya?ml$/i.test(configPath)) {
     throw new Error(`Config file must be .yaml or .yml: ${configPath}`);
   }
   const content = readFileSync(configPath, 'utf8');
-  const parsed = parseYaml(content) as unknown;
+  const interpolated = interpolateEnv(content, env);
+  const parsed = parseYaml(interpolated) as unknown;
   return normalizeProfile(parsed, configPath);
+}
+
+export function interpolateEnv(
+  content: string,
+  env: NodeJS.ProcessEnv = process.env,
+  warn: (message: string) => void = message => console.warn(message)
+): string {
+  const warned = new Set<string>();
+  return content.replace(/\$\{([A-Za-z_][A-Za-z0-9_]*)(?:(:-|-)([^}]*))?\}/g, (_match, name, operator, defaultValue) => {
+    const value = env[name];
+    const isSet = value !== undefined;
+    const isEmpty = value === '';
+
+    if (operator === ':-') {
+      return isSet && !isEmpty ? value : defaultValue;
+    }
+    if (operator === '-') {
+      return isSet ? value : defaultValue;
+    }
+    if (isSet) {
+      return value;
+    }
+
+    if (!warned.has(name)) {
+      warned.add(name);
+      warn(`[ensure-hosts] Environment variable ${name} is not set; substituting an empty string.`);
+    }
+    return '';
+  });
 }
 
 function normalizeProfile(value: unknown, configPath: string): ProfileConfig {
@@ -281,6 +399,22 @@ function parseBooleanEnv(value: string | undefined): boolean {
   return ['1', 'true', 'yes', 'on'].includes(value.trim().toLowerCase());
 }
 
+function parseEnvOverrideMode(value: string, source: string): EnvOverrideMode {
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'overwrite' || normalized === 'respect') {
+    return normalized;
+  }
+  throw new Error(`${source} must be one of: overwrite, respect.`);
+}
+
+function parseEnvFileMissingMode(value: string, source: string): EnvFileMissingMode {
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'ignore' || normalized === 'error') {
+    return normalized;
+  }
+  throw new Error(`${source} must be one of: ignore, error.`);
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -313,7 +447,9 @@ export function usage(): string {
     '',
     'Options:',
     '  --config <path>      YAML/YML config file path (repeatable)',
-    '  --env-file <path>    dotenv file path (default: .env)',
+    '  --env-file <path>    dotenv file path (default: .env, repeatable)',
+    '  --env-override <mode>  dotenv collision mode: overwrite|respect (default: overwrite)',
+    '  --env-file-missing <mode>  missing dotenv mode: ignore|error (default: ignore)',
     '  --hosts-file <path>  override hosts file path',
     '  --dry-run            print rewritten hosts content without writing',
     '  --print-records      print expanded records and exit',

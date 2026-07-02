@@ -8,6 +8,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - No unreleased changes yet.
 
+## [0.1.4] - 2026-07-02
+
+### Added
+
+- Docker Compose-like environment variable interpolation in YAML configs, including `${VAR}`, `${VAR:-default}`, and `${VAR-default}` forms.
+- Repeatable `--env-file` loading with configurable collision behavior via `--env-override` or `ENSURE_HOSTS_ENV_OVERRIDE`.
+- Missing dotenv file handling via `--env-file-missing` or `ENSURE_HOSTS_ENV_FILE_MISSING`.
+
 ## [0.1.3] - 2026-07-01
 
 ### Added
